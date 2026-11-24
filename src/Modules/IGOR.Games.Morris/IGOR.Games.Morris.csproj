@@ -1,0 +1,45 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net5.0-windows</TargetFramework>
+		<Nullable>disable</Nullable>
+		<UseWPF>true</UseWPF>
+		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+		<AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\Common\IGOR.Common.WPF\IGOR.Common.WPF.csproj" />
+		<ProjectReference Include="..\..\Interfaces\IGOR.Interface.Camera\IGOR.Interface.Camera.csproj" />
+		<ProjectReference Include="..\..\Interfaces\IGOR.Interface.Game\IGOR.Interface.Game.csproj" />
+		<ProjectReference Include="..\..\Interfaces\IGOR.Interface.Navigation\IGOR.Interface.Navigation.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ModuleFiles Include="$(TargetDir)*.dll" DestinationPath="$(SolutionDir)IGOR\bin\$(Configuration)\Modules\%(Filename)%(Extension)" />
+		<DebugFiles Include="$(TargetDir)*.pdb" DestinationPath="$(SolutionDir)IGOR\bin\$(Configuration)\%(Filename)%(Extension)" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Remove="Icons\Morris.png" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Resource Include="Icons\Morris.png" />
+	</ItemGroup>
+
+	<Target Name="PostBuild" AfterTargets="PostBuildEvent" Inputs="@(ModuleFiles)" Outputs="@(ModuleFiles->'%(DestinationPath)')">
+		<Copy SourceFiles="@(ModuleFiles)" DestinationFiles="@(ModuleFiles->'%(DestinationPath)')" />
+		<Message Text="Modules Copied" />
+	</Target>
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+    <Exec Command="xcopy /y &quot;$(TargetPath)&quot; &quot;..\..\IGOR\bin\Debug\Modules\&quot;" />
+  </Target>
+
+	<Target Name="CopyDebugInfos" AfterTargets="PostBuildEvent" Condition="'$(Configuration)' == 'Debug'" Inputs="@(DebugFiles)" Outputs="@(DebugFiles-&gt;%(DestinationPath))">
+		<Copy SourceFiles="@(DebugFiles)" DestinationFiles="@(DebugFiles->'%(DestinationPath)')" />
+		<Message Text="DebugFiles Copied" />
+	</Target>
+
+</Project>

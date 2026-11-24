@@ -1,0 +1,10 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="clr-namespace:IGOR.Common">
+
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="pack://application:,,,/IGOR.Common.WPF;component/Themes/Controls/ControlButtonStyle.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+    
+</ResourceDictionary>

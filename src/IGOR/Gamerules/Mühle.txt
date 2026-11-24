@@ -1,0 +1,21 @@
+﻿Ziel: Gegner kann keinen Zug machen (keine Steine mehr oder alle Steine bewegungsunfähig)
+
+Allgemein
+	1. Steine dürfen nur auf Eck- oder Mittelpunkte von Linien gesetzt werden
+	2. Gehören drei Steine in einer Reihe demselben Spieler, entsteht eine Mühle
+		a. Beim Erschaffen einer Mühle darf ein gegnerischer Spielstein vom Spielbrett entfernt werden
+		b. Steine, die sich in einer Mühle befinden, dürfen vom Gegner nicht geschmissen werden
+		c. Ein Stein kann Teil von mehreren Mühlen sein
+		
+SPIELPHASEN: Gelten individuell für die Spieler (Spieler müssen nicht innerhalb derselben Phase sein)
+Setzen
+	3. Zu Beginn haben beide Spieler jeweils 9 Steine, die sie nacheinander auf das Spielbrett setzen können
+	4. Steine dürfen nur auf freie Felder gesetzt werden
+	5. Sind alle 9 Steine platziert, beginnt die Phase des Schiebens
+Schieben
+	6. Steine dürfen nur entlang der Linien bewegt werden (keine diagonalen Bewegungen)
+	7. Steine dürfen nur auf freie Felder bewegt werden
+	8. Ein Stein darf nur auf Nachbarfelder verschoben werden
+	9. Hat ein Spieler nur noch drei oder weniger Steine, beginnt die Phase des Springens
+Springen
+	10. Steine dürfen auf beliebige freie Felder "springen"

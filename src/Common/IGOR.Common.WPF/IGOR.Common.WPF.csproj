@@ -1,0 +1,82 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net5.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="Icons\Edit.png" />
+    <None Remove="Icons\Error.png" />
+    <None Remove="Icons\HandMode.png" />
+    <None Remove="Icons\Home.png" />
+    <None Remove="Icons\Information.png" />
+    <None Remove="Icons\KingIcon.png" />
+    <None Remove="Icons\MechgamesLogo.png" />
+    <None Remove="Icons\Parameter.png" />
+    <None Remove="Icons\Save.png" />
+    <None Remove="Icons\StatusConfig.png" />
+    <None Remove="Icons\StatusInvalid.png" />
+    <None Remove="Icons\StatusRun.png" />
+    <None Remove="Icons\StatusRunOutline.png" />
+    <None Remove="Icons\StatusStop.png" />
+    <None Remove="Icons\StatusStopOutline.png" />
+    <None Remove="Icons\Upload.png" />
+    <None Remove="Icons\Warning.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Icons\Home.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Prism.Wpf" Version="8.1.97" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\IGOR.Common\IGOR.Common.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Icons\Edit.png" />
+    <Resource Include="Icons\Error.png" />
+    <Resource Include="Icons\HandMode.png" />
+    <Resource Include="Icons\Information.png" />
+    <Resource Include="Icons\KingIcon.png" />
+    <Resource Include="Icons\MechgamesLogo.png" />
+    <Resource Include="Icons\Parameter.png" />
+    <Resource Include="Icons\Save.png" />
+    <Resource Include="Icons\StatusConfig.png" />
+    <Resource Include="Icons\StatusInvalid.png" />
+    <Resource Include="Icons\StatusRun.png" />
+    <Resource Include="Icons\StatusRunOutline.png" />
+    <Resource Include="Icons\StatusStop.png" />
+    <Resource Include="Icons\StatusStopOutline.png" />
+    <Resource Include="Icons\Upload.png" />
+    <Resource Include="Icons\Warning.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Page Update="Styles\Colors.xaml">
+      <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
+    </Page>
+    <Page Update="Styles\DataGridStyle.xaml">
+      <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
+    </Page>
+    <Page Update="Styles\DefaultStyle.xaml">
+      <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
+    </Page>
+    <Page Update="Styles\Icons.xaml">
+      <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
+    </Page>
+    <Page Update="Themes\Controls\ControlButtonStyle.xaml">
+      <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="Themes\Generic.xaml">
+      <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
+      <SubType>Designer</SubType>
+    </Page>
+  </ItemGroup>
+
+</Project>

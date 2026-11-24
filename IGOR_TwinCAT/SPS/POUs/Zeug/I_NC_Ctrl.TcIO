@@ -1,0 +1,85 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <Itf Name="I_NC_Ctrl" Id="{a480c6ae-9e3a-4675-b765-b501904446f7}">
+    <Declaration><![CDATA[INTERFACE I_NC_Ctrl
+]]></Declaration>
+    <Method Name="M_AxisRef" Id="{1d5a7e3d-c5f0-4530-9e1e-37a8d657085e}">
+      <Declaration><![CDATA[METHOD M_AxisRef
+VAR_INPUT
+	rX:		REFERENCE TO AXIS_REF;
+	rY:		REFERENCE TO AXIS_REF;
+	rZ:		REFERENCE TO AXIS_REF;
+END_VAR
+]]></Declaration>
+    </Method>
+    <Method Name="M_CancleJob" Id="{92149c75-8fe6-43ca-91e7-a3e8e3327ff6}">
+      <Declaration><![CDATA[METHOD M_CancleJob
+VAR_INPUT
+END_VAR
+]]></Declaration>
+    </Method>
+    <Method Name="M_Cyclic" Id="{c683369b-9f35-4259-a9b1-3cfbae050536}">
+      <Declaration><![CDATA[METHOD M_Cyclic
+VAR_INPUT
+END_VAR
+]]></Declaration>
+    </Method>
+    <Method Name="M_NewJob" Id="{a4afe8d1-d8f8-4517-851d-54121156e9a6}">
+      <Declaration><![CDATA[METHOD M_NewJob
+VAR_INPUT
+	fTargetPosX:	LREAL;
+	fTargetPosY:	LREAL;
+	fTargetPosZ:	LREAL;
+END_VAR
+]]></Declaration>
+    </Method>
+    <Property Name="P_bInductiveSensor" Id="{dc15d7b9-b09f-4ad4-8a8d-be23cf337859}">
+      <Declaration><![CDATA[PROPERTY P_bInductiveSensor : BOOL]]></Declaration>
+      <Set Name="Set" Id="{08d8c3d5-baf1-4457-adc2-bde4a44d7015}">
+        <Declaration><![CDATA[]]></Declaration>
+      </Set>
+    </Property>
+    <Property Name="P_Busy" Id="{ea967120-24ca-4ec7-a56b-3e1c1770d0b1}">
+      <Declaration><![CDATA[PROPERTY P_Busy : BOOL]]></Declaration>
+      <Get Name="Get" Id="{aa3b357c-8cc9-462d-a05f-887fb586a96b}">
+        <Declaration><![CDATA[]]></Declaration>
+      </Get>
+    </Property>
+    <Property Name="P_Enable" Id="{2c3aae3c-21fa-4d73-a5a0-9754ec252826}">
+      <Declaration><![CDATA[PROPERTY P_Enable : BOOL]]></Declaration>
+      <Set Name="Set" Id="{c72c20f0-10df-47cd-9ac8-b983cd39d847}">
+        <Declaration><![CDATA[]]></Declaration>
+      </Set>
+    </Property>
+    <Property Name="P_ErrID" Id="{837720ed-cbd0-4052-a059-d9e9bb324f20}">
+      <Declaration><![CDATA[PROPERTY P_ErrID : E_ErrorIDs]]></Declaration>
+      <Get Name="Get" Id="{318a4bb5-e415-4017-926a-1efc8d9982d8}">
+        <Declaration><![CDATA[]]></Declaration>
+      </Get>
+    </Property>
+    <Property Name="P_Error" Id="{f86d6699-7f12-4622-adc5-9ebd43ddac9c}">
+      <Declaration><![CDATA[PROPERTY P_Error : BOOL]]></Declaration>
+      <Get Name="Get" Id="{a69942f8-c952-4c2b-ba21-7faf872a35ac}">
+        <Declaration><![CDATA[]]></Declaration>
+      </Get>
+    </Property>
+    <Property Name="P_ErrSrc" Id="{aa86c68a-5fea-4f28-96b8-5b489440d332}">
+      <Declaration><![CDATA[PROPERTY P_ErrSrc : E_ErrorSrcs]]></Declaration>
+      <Get Name="Get" Id="{7d47e0b2-e028-4e84-a5a4-8bd47e774135}">
+        <Declaration><![CDATA[]]></Declaration>
+      </Get>
+    </Property>
+    <Property Name="P_ReadyForJob" Id="{4d952702-9938-4dd1-9537-57097d2065fc}">
+      <Declaration><![CDATA[PROPERTY P_ReadyForJob : BOOL]]></Declaration>
+      <Get Name="Get" Id="{71daa0cc-b4b1-4173-b54e-6591790f5309}">
+        <Declaration><![CDATA[]]></Declaration>
+      </Get>
+    </Property>
+    <Property Name="P_Reset" Id="{980ab54a-f37d-4221-81d4-93bc886436a2}">
+      <Declaration><![CDATA[PROPERTY P_Reset : BOOL]]></Declaration>
+      <Set Name="Set" Id="{0f162c20-e217-44bc-bb45-65f6fa7ee31b}">
+        <Declaration><![CDATA[]]></Declaration>
+      </Set>
+    </Property>
+  </Itf>
+</TcPlcObject>

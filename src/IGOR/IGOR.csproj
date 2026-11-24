@@ -1,0 +1,65 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net5.0-windows</TargetFramework>
+		<UseWPF>true</UseWPF>
+		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+		<AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+		<AssemblyName>IGOR</AssemblyName>
+		<ApplicationIcon>favicon.ico</ApplicationIcon>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+		<DocumentationFile>bin\Debug\IGOR.xml</DocumentationFile>
+		<OutputPath>bin\Debug\</OutputPath>
+	</PropertyGroup>
+	<ItemGroup>
+		<None Remove="Views\IGRO_Logo_white.png" />
+	</ItemGroup>
+	<ItemGroup>
+	  <Content Include="favicon.ico" />
+	</ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="OpenCvSharp4.runtime.win" Version="4.5.3.20211207" />
+		<PackageReference Include="Prism.DryIoc" Version="8.1.97" />
+		<PackageReference Include="PropertyChanged.Fody" Version="3.4.0" />
+		<PackageReference Include="Serilog" Version="2.10.0" />
+		<PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
+	</ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\Common\IGOR.Common.WPF\IGOR.Common.WPF.csproj" />
+		<ProjectReference Include="..\Interfaces\IGOR.Interface.Communication\IGOR.Interface.Communication.csproj" />
+		<ProjectReference Include="..\Interfaces\IGOR.Interface.Logging\IGOR.Interface.Logging.csproj" />
+		<ProjectReference Include="..\Interfaces\IGOR.Interface.Navigation\IGOR.Interface.Navigation.csproj" />
+		<ProjectReference Include="..\Interfaces\IGOR.Interface.Paramters\IGOR.Interface.Parameters.csproj" />
+		<ProjectReference Include="..\Modules\IGOR.Display.Calibration\IGOR.Display.Calibration.csproj" />
+		<ProjectReference Include="..\Modules\IGOR.Display.GameBoard\IGOR.Display.GameBoard.csproj" />
+	</ItemGroup>
+	<ItemGroup>
+		<None Update="Data\Actors.json">
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Data\AppParams.json">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Data\ErrorMessages.json">
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Data\PlcParams.json">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Gamerules\Dame.txt">
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Gamerules\Mühle.txt">
+		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+		<None Update="Gamerules\TicTacToe.txt">
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+	</ItemGroup>	
+	<ProjectExtensions>
+		<VisualStudio>
+			<UserProperties />
+		</VisualStudio>
+	</ProjectExtensions>
+</Project>

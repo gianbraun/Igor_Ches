@@ -1,0 +1,80 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.9">
+  <POU Name="FB_SafeGroup" Id="{7216a0e3-7bbd-4117-a754-6d5b91e07144}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_SafeGroup
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+	bIsReset:		BOOL;
+	fbError:		FB_Error;
+END_VAR
+VAR
+	nDiag	AT %I*:	USINT;
+	nState	AT %I*:	USINT;
+	sMsg:			STRING;
+	i:				INT;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[bIsReset := nState = 5;
+CASE nState OF
+	0: //undefined
+		IF NOT fbError.bError THEN
+			fbError.M_Set(1, 'Undefinierter State!', nState, eID := E_ErrorIDs.eUndefinedState, eSrc := E_ErrorSrcs.eSafetyGroup);
+		END_IF
+	1: //RUN
+		IF fbError.bError THEN
+			fbError.M_Reset();
+		END_IF
+	2:;
+	4://Error
+		CASE nDiag OF
+			0:
+				fbError.M_Set(1, 'Ungültiger Wert!', nDiag, eID := E_ErrorIDs.eInvalidData, eSrc := E_ErrorSrcs.eSafetyGroup); //nState sagt Error, nDiag sagt aber kein Error! 
+			1:	
+				fbError.M_Set(1, 'Safety FB Error!', nDiag, eID := E_ErrorIDs.eSafetyFbError, eSrc := E_ErrorSrcs.eSafetyGroup); 
+			2:	
+				fbError.M_Set(1, 'Safety Kommunikationsfehler!', nDiag, eID := E_ErrorIDs.eCommError, eSrc := E_ErrorSrcs.eSafetyGroup); 
+			3:	
+				fbError.M_Set(1, 'Module Fault!', nDiag, eID := E_ErrorIDs.eModuleFault, eSrc := E_ErrorSrcs.eSafetyGroup); 
+			4:	
+				fbError.M_Set(1, 'Vergleich-Fehler!', nDiag, eID := E_ErrorIDs.eCompareError, eSrc := E_ErrorSrcs.eSafetyGroup); 
+			5:	                                              
+				fbError.M_Set(1, 'Timeout Com-Fehler!', nDiag, eID := E_ErrorIDs.eTimeout, eSrc := E_ErrorSrcs.eSafetyGroup);
+			6:	                                              
+				fbError.M_Set(1, 'Restart Fehler!', nDiag, eID := E_ErrorIDs.eReset, eSrc := E_ErrorSrcs.eSafetyGroup); 
+			ELSE                                              
+				fbError.M_Set(1, 'Ungültiger Wert!', nDiag, eID := E_ErrorIDs.eInvalidData, eSrc := E_ErrorSrcs.eSafetyGroup);
+		END_CASE
+	5,6,7,16,17:;
+	ELSE //undefined
+		IF NOT fbError.bError THEN
+			fbError.M_Set(1, 'Undefinierter State!', nState, eID := E_ErrorIDs.eUndefinedState, eSrc := E_ErrorSrcs.eSafetyGroup);
+		END_IF
+END_CASE]]></ST>
+    </Implementation>
+    <LineIds Name="FB_SafeGroup">
+      <LineId Id="118" Count="0" />
+      <LineId Id="9" Count="0" />
+      <LineId Id="16" Count="0" />
+      <LineId Id="33" Count="0" />
+      <LineId Id="19" Count="0" />
+      <LineId Id="34" Count="0" />
+      <LineId Id="20" Count="4" />
+      <LineId Id="63" Count="0" />
+      <LineId Id="111" Count="0" />
+      <LineId Id="161" Count="0" />
+      <LineId Id="167" Count="3" />
+      <LineId Id="184" Count="0" />
+      <LineId Id="172" Count="2" />
+      <LineId Id="177" Count="3" />
+      <LineId Id="166" Count="0" />
+      <LineId Id="181" Count="0" />
+      <LineId Id="183" Count="0" />
+      <LineId Id="162" Count="0" />
+      <LineId Id="125" Count="3" />
+      <LineId Id="119" Count="0" />
+      <LineId Id="17" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

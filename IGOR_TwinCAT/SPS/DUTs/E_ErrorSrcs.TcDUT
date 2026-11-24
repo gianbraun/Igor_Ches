@@ -1,0 +1,27 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.9">
+  <DUT Name="E_ErrorSrcs" Id="{0046bfd6-a751-446a-8d13-7a7f450c905d}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE E_ErrorSrcs :
+(
+	eNoError := 0,
+	ePlc := 1,
+	eAxisX := 2,
+	eAxisY := 3,
+	eAxisZ := 4,
+	eAxisGroup := 5,
+	eAxisCtrlPtp := 6,
+	eAxisCtrlNci := 7,
+	eAxisCtrl := 8,
+	eGripper := 9,
+	eSafety := 10,
+	eSafetyGroup := 11,
+	eSafetyFb := 12,
+	ePortal := 13,
+	eFuse := 14
+);
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

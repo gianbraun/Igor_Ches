@@ -1,0 +1,3 @@
+﻿Ziel: Drei Steine in einer Linie positionieren (horizontal, vertikal oder diagonal)
+	
+	• Ein Stein darf nur auf ein freies Feld gesetzt werden

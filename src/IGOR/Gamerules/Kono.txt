@@ -1,0 +1,11 @@
+﻿Regelwerk für Kono:
+
+Ziel: Alle eigenen Spielsteine auf die Ausgangspositionen des Gegners bringen.
+
+1. Die Spielsteine dürfen nur diagonal entlag der Linien gezogen werden.
+
+2. Die Spielsteine dürfen nur um ein Feld verschoben werden.
+
+3. Die Spielsteine dürfen nur auf freie Felder gezogen werden.
+	a. es werden keine Spielsteine geschlagen
+	b. es wird nicht über andere spielsteine gesprungen

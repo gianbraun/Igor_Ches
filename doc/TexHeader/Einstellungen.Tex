@@ -1,0 +1,81 @@
+\pagestyle{scrheadings}
+\newpairofpagestyles{main}{
+	\ohead{\leftmark}
+	\ihead{\Ifstr{\leftmark}{\rightmark}{}{\rightmark}} 
+	\cfoot{\pagemark}
+	\addtokomafont{pagefoot}{\upshape \footnotesize}
+	\addtokomafont{pagenumber}{\normalsize}
+	\addtokomafont{pagehead}{\upshape \normalsize}
+	\KOMAoptions{
+		headsepline = true,
+		footsepline = true,
+	}
+}
+
+\renewcommand*{\chapterpagestyle}{main}
+\BeforeStartingTOC[toc]{\pagestyle{toc}}
+
+\newpairofpagestyles{toc}{
+	\cfoot{\pagemark}
+	\addtokomafont{pagefoot}{\upshape}
+	\KOMAoptions{
+		headsepline = false,
+		footsepline = true,
+	}
+}
+
+\hypersetup{
+    bookmarksopen = true,
+    colorlinks = false,
+    linkbordercolor = red,
+	urlcolor=cyan,
+    pdfborderstyle={/S/U/W 1}
+}
+
+\lstset{
+	extendedchars=true,
+	numberstyle=\footnotesize,
+	language=[Sharp]C,
+    numbers=left,
+    frame = single,
+    keywordstyle=\color{blue},
+    captionpos=b,
+	tabsize = 4,
+	commentstyle=\color{lightgray},
+	literate=
+  	{Ö}{{\"O}}1
+  	{Ä}{{\"A}}1
+  	{Ü}{{\"U}}1
+  	{ß}{{\ss}}1
+  	{ü}{{\"u}}1
+  	{ä}{{\"a}}1
+  	{ö}{{\"o}}1
+}
+
+
+\renewcommand\familydefault{\sfdefault}
+%Absatz Einrückung verhindern
+\setlength{\parindent}{0pt}
+
+% Abbildungen etc. Richtig nummerieren
+\counterwithin{figure}{chapter}
+\counterwithin{table}{chapter}
+\AtBeginDocument{\counterwithin{lstlisting}{chapter}}
+
+
+\renewcommand{\appendixpagename}{\appendixname}
+\renewcommand{\appendixtocname}{\appendixname}
+
+% \captionsetup
+% {
+% 	format=plain,
+%     justification=raggedright,
+%     singlelinecheck=false
+% }
+
+\captionsetup[figure]
+{
+	format=plain,
+    justification=centering,
+    singlelinecheck=false
+}

@@ -1,0 +1,756 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="FB_NciCtrl" Id="{6736fce8-dc0a-4c34-be55-0b8c5fc4f893}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_NciCtrl IMPLEMENTS I_NC_Ctrl
+VAR CONSTANT
+	stEmptyCommand:		ST_PositionCmd := (nNo:=0, fPosX:=0, fPosY:=0, fPosZ:=0, fVelo:=0, bExact := FALSE);
+END_VAR
+VAR
+	VELO:				LREAL := 2000;
+	DEBUG_RATIO:		LREAL := 0.3;
+	bEnable:			BOOL;
+	bReset:				BOOL;
+	bBusy:				BOOL;
+	fbError:			FB_Error;
+	eState:				E_NCI_STATE;
+	
+	rAxisX:				REFERENCE TO AXIS_REF;
+	rAxisY:				REFERENCE TO AXIS_REF;
+	rAxisZ:				REFERENCE TO AXIS_REF;
+	
+	fTargetX:			LREAL;
+	fTargetY:			LREAL;
+	fTargetZ:			LREAL;
+	
+	fNextTargetX:		LREAL;
+	fNextTargetY:		LREAL;
+	fNextTargetZ:		LREAL;
+	
+//NCI	
+	stItpToPlc AT %I*:	NcToPlc_NciChannel_Ref;
+	stPlcToItp AT %Q*:	PLCTONC_NCICHANNEL_REF;
+	
+	nFilledRows: 		INT	:= 0;
+	nCounter: 			INT	:= 0;
+	
+	nCommands:			UINT;
+	aPositionCmds: 		ARRAY[0..3] OF ST_PositionCmd;	
+	
+	fbBuildGroup:		CfgBuildExt3DGroup;
+	fbClearGroup:		CfgReconfigGroup;
+	
+	fbFeedTablePrep:	FB_NciFeedTablePreparation;	(* fb that is good for the preparation of the table - inserts elements to table *)
+	fbFeedTable: 		FB_NciFeedTable;	(* is responsible that the prepared table is transfered to nc-kernel *)
+	
+	fbNciEStop:			ItpEStopEx;
+	fbNciReset:			ItpResetEx2;
+	bEStop:				BOOL;
+	
+	stNciFeedTable:		ST_NciFeedGroupTable;	(* table that holds the entries *)
+	
+	stGeoStart: 		ST_NciGeoStart;		(* structure for starting pos - required if first entry is a circle *)
+	stGeoLine: 			ST_NciGeoLine;		(* structure for straight line segment *)
+	stVertexSmoothing: 	ST_NciVertexSmoothing;	(* structure to enable blending of serveral geo entries *)
+	stEndOfTables: 		ST_NciEndOfTables;	(* structure to indicate end of tables *)	
+END_VAR
+VAR
+	bInductiveSensor: BOOL;
+	nCntForAxesReady: UINT := 0;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[CASE eState OF
+	E_NCI_State_INIT:
+		IF __ISVALIDREF(rAxisX) AND __ISVALIDREF(rAxisY) AND __ISVALIDREF(rAxisZ) THEN		
+			eState := E_NCI_State_IDLE;
+			nCntForAxesReady := 0;
+		END_IF
+		
+	E_NCI_State_IDLE:
+		M_AxesReady();
+		IF fTargetX <> fNextTargetX OR fTargetY <> fNextTargetY OR fTargetZ <> fNextTargetZ THEN
+			IF M_AxesReady() (*AND nCntForAxesReady < 5*) THEN
+				IF bInductiveSensor 
+					AND fNextTargetZ < rAxisZ.NcToPlc.ActPos 
+					AND fNextTargetX - 3 > rAxisX.NcToPlc.ActPos AND fNextTargetX + 3 < rAxisX.NcToPlc.ActPos
+					AND fNextTargetY - 3 > rAxisY.NcToPlc.ActPos AND fNextTargetY + 3 < rAxisX.NcToPlc.ActPos
+				THEN
+					fbError.M_Set(1, 'Neuer NCI-Auftrag: tiefer fahren nicht erlaubt', eState, E_ErrorIDs.eNotAllowedDriveDown, E_ErrorSrcs.eAxisCtrlNci);
+					eState	:= E_NCI_State_ERROR;
+				ELSE
+					fTargetX := fNextTargetX;
+					fTargetY := fNextTargetY;
+					fTargetZ := fNextTargetZ;
+					eState := E_NCI_State_BUILD_GROUP;
+					bReset := FALSE;
+					bBusy := TRUE;
+					nCntForAxesReady := 0;
+				END_IF
+			(*ELSIF NOT M_AxesReady() AND nCntForAxesReady < 5 THEN
+				nCntForAxesReady := nCntForAxesReady + 1;*)
+			ELSE
+				fbError.M_Set(1, 'Achsen nicht betriebsbereit', eState, E_ErrorIDs.eAxesNotReady, E_ErrorSrcs.eAxisCtrlNci);
+			END_IF
+		END_IF
+		
+	E_NCI_State_BUILD_GROUP://Interpolationsgruppe bauen 		
+		fbBuildGroup(
+			bExecute:=TRUE, 
+			nGroupId:=ItpGetGroupId(sNciToPlc:=stItpToPlc) , 
+			nXAxisId:=rAxisX.NcToPlc.AxisId, 
+			nYAxisId:=rAxisY.NcToPlc.AxisId, 
+			nZAxisId:=rAxisZ.NcToPlc.AxisId, 
+			nQ1AxisId:= 0, 
+			nQ2AxisId:= 0, 
+			nQ3AxisId:= 0, 
+			nQ4AxisId:= 0, 
+			nQ5AxisId:= 0);
+			
+		IF NOT fbBuildGroup.bBusy THEN
+			IF NOT fbBuildGroup.bErr THEN
+				ItpSetOverridePercent(HMI.fAxesOverride, stPlcToItp);
+				A_PrepareTable();
+				eState	:= E_NCI_State_FEED_TABLE;
+			ELSE
+				fbError.M_Set(fbBuildGroup.nErrId, 'Fehler beim Bauen der Gruppe!', eState, eID := E_ErrorIDs.eBuildGroup, eSrc := E_ErrorSrcs.eAxisCtrlNci);
+				eState	:= E_NCI_State_ERROR;
+			END_IF
+			fbBuildGroup(bExecute:=FALSE); 
+		END_IF
+		
+	E_NCI_State_FEED_TABLE: //Tabelle füllen
+		fbFeedTable(
+			bExecute:=TRUE,
+			bReset:=FALSE,
+			bLogFeederEntries:=FALSE,
+			stFeedGroupTable:=stNciFeedTable,
+			stNciToPlc:=stItpToPlc);
+		IF fbFeedTable.bFeedingDone THEN //Alle Befehle sind in Tabelle gespeichert
+			eState	:= E_NCI_State_RUN;
+		ELSIF fbFeedTable.bError THEN
+			fbError.M_Set(fbFeedTable.nErrorId, 'Fehler beim Tabelle füllen', eState, eID := E_ErrorIDs.eFillTable, eSrc := E_ErrorSrcs.eAxisCtrlNci);
+			eState := E_NCI_State_CLEAR_GROUP;
+		END_IF
+		
+	E_NCI_State_RUN:
+		IF NOT bEnable THEN
+			eState := E_NCI_State_ABORT;
+		ELSE
+			fbFeedTable(stFeedGroupTable:=stNciFeedTable, stNciToPlc:=stItpToPlc);
+			IF fbFeedTable.bChannelDone THEN //Bewegung abgeschlossen
+				fbFeedTable(bExecute:=FALSE, bReset:=FALSE, stFeedGroupTable:=stNciFeedTable, stNciToPlc:=stItpToPlc);
+				eState := E_NCI_State_CLEAR_GROUP;
+			ELSIF fbFeedTable.bError THEN
+				fbError.M_Set(fbFeedTable.nErrorId, 'Fehler beim Fahren des Kommandos', eState, eID := E_ErrorIDs.eAbsMove, eSrc := E_ErrorSrcs.eAxisCtrlNci);
+				eState := E_NCI_State_CLEAR_GROUP;
+			END_IF
+		END_IF
+
+	E_NCI_State_ABORT:
+		fbFeedTable(bExecute := FALSE, stFeedGroupTable:=stNciFeedTable, stNciToPlc:=stItpToPlc);
+		fbNciEStop(sNciToPlc := stItpToPlc);
+		IF NOT fbNciEStop.bBusy THEN
+			IF NOT fbNciEStop.bErr THEN
+				fbFeedTablePrep(bResetTable:=TRUE, stFeedGroupTable:=stNciFeedTable);
+				fbFeedTablePrep(bResetTable:=FALSE, stFeedGroupTable:=stNciFeedTable);
+			ELSE
+				fbError.M_Set(fbNciEStop.nErrId, 'Fehler beim EStop!', eState, eID := E_ErrorIDs.eStopAxis, eSrc := E_ErrorSrcs.eAxisCtrlNci);
+			END_IF
+			bEStop := TRUE;
+			eState := E_NCI_State_CLEAR_GROUP;
+			fbNciEStop(sNciToPlc := stItpToPlc, bExecute := FALSE);
+		END_IF
+	
+	E_NCI_State_CLEAR_GROUP:
+		fbClearGroup(bExecute := TRUE, nGroupId := stItpToPlc.GrpId);
+		IF NOT fbClearGroup.bBusy THEN
+			fbClearGroup(bExecute := FALSE, nGroupId := stItpToPlc.GrpId);
+			IF NOT fbError.bError THEN
+				IF NOT fbClearGroup.bErr THEN
+					IF bEStop THEN
+						bEStop := FALSE;
+						eState := E_NCI_State_ESTOP;
+					ELSE			
+						eState := E_NCI_State_IDLE;
+					END_IF
+				ELSE
+					fbError.M_Set(fbClearGroup.nErrId, 'Fehler beim Auflösen der Gruppe!', eState, eID := E_ErrorIDs.eClearGroup, eSrc := E_ErrorSrcs.eAxisCtrlNci);
+					eState := E_NCI_State_ERROR;
+				END_IF
+			ELSE
+				eState := E_NCI_State_ERROR;
+			END_IF
+		END_IF
+	
+	E_NCI_State_ESTOP:
+		IF bReset THEN
+			fbFeedTable(bExecute := TRUE, bReset := TRUE, stFeedGroupTable := stNciFeedTable, stNciToPlc := stItpToPlc);
+			IF NOT fbFeedTable.bResetBusy THEN
+				IF NOT fbFeedTable.bError THEN
+					fbFeedTable(bExecute := FALSE, bReset := FALSE, stFeedGroupTable := stNciFeedTable, stNciToPlc := stItpToPlc);
+					bReset := FALSE;
+					nCntForAxesReady := 0;
+					eState := E_NCI_State_IDLE;
+				ELSE
+					fbError.M_Set(fbFeedTable.nErrorId, 'Fehler beim Tabellen-Reset!', eState, eID := E_ErrorIDs.eReset, eSrc := E_ErrorSrcs.eAxisCtrlNci);
+					eState := E_NCI_State_ERROR;
+				END_IF
+			END_IF
+		END_IF
+	
+	E_NCI_State_ERROR:
+		IF bReset THEN
+			fbFeedTable(bExecute := TRUE, bReset := TRUE, stFeedGroupTable := stNciFeedTable, stNciToPlc := stItpToPlc);
+			IF NOT fbFeedTable.bResetBusy THEN
+				IF NOT fbFeedTable.bError THEN
+					fbFeedTable(bExecute := FALSE, bReset := FALSE, stFeedGroupTable := stNciFeedTable, stNciToPlc := stItpToPlc);
+					bReset := FALSE;
+					nCntForAxesReady := 0;
+					eState := E_NCI_State_IDLE;
+					fbError.M_Reset();
+				END_IF
+			END_IF
+		END_IF
+END_CASE
+]]></ST>
+    </Implementation>
+    <Action Name="A_PrepareTable" Id="{311217eb-d4e4-487f-aba4-916bbc2f8abe}">
+      <Implementation>
+        <ST><![CDATA[(* clear all old entries & reset to default data *)
+fbFeedTablePrep(
+	bResetAll:=TRUE,
+	stFeedGroupTable:=stNciFeedTable );
+
+(* fill up table with start position *)
+stGeoStart.fPosX	:= rAxisX.NcToPlc.SetPos;
+stGeoStart.fPosY	:= rAxisY.NcToPlc.SetPos;
+stGeoStart.fPosZ	:= rAxisZ.NcToPlc.SetPos;
+fbFeedTablePrep(
+	nEntryType:= E_NciEntryTypeGeoStart,
+	pEntry:= ADR(stGeoStart) ,
+	bResetAll:=FALSE,
+	bResetTable:= FALSE,
+	stFeedGroupTable:= stNciFeedTable,
+	nFilledRows=>nFilledRows);
+IF fbFeedTablePrep.bError THEN
+	IF fbFeedTablePrep.nErrorId = ErrNciFeedTableFull THEN
+		fbError.M_Set(fbFeedTablePrep.nErrorId, 'Tabelle voll!', eState, eID := E_ErrorIDs.eFillTable, eSrc := E_ErrorSrcs.eAxisCtrlNci);
+		eState := E_NCI_State_ERROR;
+	ELSE
+		fbError.M_Set(fbFeedTablePrep.nErrorId, 'Fehler beim Tabelle speisen!', eState, eID := E_ErrorIDs.eFillTable, eSrc := E_ErrorSrcs.eAxisCtrlNci);
+		eState := E_NCI_State_ERROR;
+	END_IF
+	RETURN;
+END_IF
+
+
+(* enable vertex smoothing *)
+stVertexSmoothing.fRadius	:= 50.0; 	(* max. blending radius *)
+stVertexSmoothing.nDisplayIndex	:= 0;
+stVertexSmoothing.nType	:= 2; (* type: parabola *)
+stVertexSmoothing.nSubtype	:= 3; (* adapative tolerance radius *)
+fbFeedTablePrep(
+	nEntryType:= E_NciEntryTypeVertexSmoothing,
+	pEntry:= ADR(stVertexSmoothing) ,
+	bResetTable:= FALSE,
+	stFeedGroupTable:= stNciFeedTable,
+	nFilledRows=>nFilledRows);
+IF fbFeedTablePrep.bError THEN
+	IF fbFeedTablePrep.nErrorId = ErrNciFeedTableFull THEN
+		fbError.M_Set(fbFeedTablePrep.nErrorId, 'Tabelle voll!', eState, eID := E_ErrorIDs.eFillTable, eSrc := E_ErrorSrcs.eAxisCtrlNci);
+		eState := E_NCI_State_ERROR;
+	ELSE
+		fbError.M_Set(fbFeedTablePrep.nErrorId, 'Fehler beim Tabelle speisen!', eState, eID := E_ErrorIDs.eFillTable, eSrc := E_ErrorSrcs.eAxisCtrlNci);
+		eState := E_NCI_State_ERROR;
+	END_IF
+	RETURN;
+END_IF
+
+A_SetPosCommands();
+
+(* add positions of the array to the feeder table *)
+FOR nCounter := 0 TO TO_INT(nCommands) - 1 DO
+	stGeoLine.nDisplayIndex	:= aPositionCmds[nCounter].nNo;
+	stGeoLine.fEndPosX		:= aPositionCmds[nCounter].fPosX;
+	stGeoLine.fEndPosY		:= aPositionCmds[nCounter].fPosY;
+	stGeoLine.fEndPosZ		:= aPositionCmds[nCounter].fPosZ;
+	stGeoLine.fVelo			:= aPositionCmds[nCounter].fVelo; (*mm per sec*)
+	stGeoLine.bAccurateStop := aPositionCmds[nCounter].bExact; 
+	fbFeedTablePrep(
+		nEntryType:= E_NciEntryTypeGeoLine,
+		pEntry:= ADR(stGeoLine),
+		bResetTable:= FALSE,
+		stFeedGroupTable:= stNciFeedTable,
+		nFilledRows=>nFilledRows);
+	IF fbFeedTablePrep.bError THEN
+		IF fbFeedTablePrep.nErrorId = ErrNciFeedTableFull THEN
+			fbError.M_Set(fbFeedTablePrep.nErrorId, 'Tabelle voll!', eState, eID := E_ErrorIDs.eFillTable, eSrc := E_ErrorSrcs.eAxisCtrlNci);
+			eState := E_NCI_State_ERROR;
+		ELSE
+			fbError.M_Set(fbFeedTablePrep.nErrorId, 'Fehler beim Tabelle speisen!', eState, eID := E_ErrorIDs.eFillTable, eSrc := E_ErrorSrcs.eAxisCtrlNci);
+			eState := E_NCI_State_ERROR;
+		END_IF
+		RETURN;
+	END_IF
+END_FOR
+
+(* add end of tables flag *)
+fbFeedTablePrep(
+	nEntryType:= E_NciEntryTypeEndOfTables,
+	pEntry:= ADR(stEndOfTables) ,
+	bResetTable:= FALSE,
+	stFeedGroupTable:= stNciFeedTable,
+	nFilledRows=>nFilledRows);
+IF fbFeedTablePrep.bError THEN
+	IF fbFeedTablePrep.nErrorId = ErrNciFeedTableFull THEN
+		fbError.M_Set(fbFeedTablePrep.nErrorId, 'Tabelle voll!', eState, eID := E_ErrorIDs.eFillTable, eSrc := E_ErrorSrcs.eAxisCtrlNci);
+		eState := E_NCI_State_ERROR;
+	ELSE
+		fbError.M_Set(fbFeedTablePrep.nErrorId, 'Fehler beim Tabelle speisen!', eState, eID := E_ErrorIDs.eFillTable, eSrc := E_ErrorSrcs.eAxisCtrlNci);
+		eState := E_NCI_State_ERROR;
+	END_IF
+	RETURN;
+END_IF
+]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="A_SetPosCommands" Id="{88e2e438-ee59-493b-85b0-f5f3586626b4}">
+      <Implementation>
+        <ST><![CDATA[FOR nCounter := 0 TO 3 DO
+	aPositionCmds[nCounter] := stEmptyCommand;
+END_FOR
+nCommands := 0;
+
+IF rAxisZ.NcToPlc.SetPos < MIN_MOVE_HEIGHT_Z AND (ABS(fTargetX - rAxisX.NcToPlc.SetPos) > 2 OR ABS(fTargetY - rAxisY.NcToPlc.SetPos) > 2) THEN
+	aPositionCmds[nCommands].nNo   := 10*(nCommands + 1);
+	aPositionCmds[nCommands].fPosX := rAxisX.NcToPlc.SetPos;
+	aPositionCmds[nCommands].fPosY := rAxisY.NcToPlc.SetPos;
+	aPositionCmds[nCommands].fPosZ := MIN_MOVE_HEIGHT_Z; //erst vertikal Gefahrenbereich verlassen, dann zum Ziel fahren
+	aPositionCmds[nCommands].fVelo := VELO;
+	aPositionCmds[nCommands].bExact := FALSE;
+	nCommands := nCommands + 1;
+END_IF
+aPositionCmds[nCommands].nNo   := 10*(nCommands + 1);	
+aPositionCmds[nCommands].fPosX := fTargetX;
+aPositionCmds[nCommands].fPosY := fTargetY;
+aPositionCmds[nCommands].fVelo := VELO;
+IF fTargetZ < MIN_MOVE_HEIGHT_Z AND (ABS(fTargetX - rAxisX.NcToPlc.SetPos) > 2 OR ABS(fTargetY - rAxisY.NcToPlc.SetPos) > 2) THEN
+	aPositionCmds[nCommands].fPosZ := MIN_MOVE_HEIGHT_Z;
+ELSE
+	aPositionCmds[nCommands].fPosZ := fTargetZ;
+	IF fTargetZ < MIN_MOVE_HEIGHT_Z THEN
+		aPositionCmds[nCommands].fVelo := VELO * DEBUG_RATIO;
+	END_IF
+END_IF
+aPositionCmds[nCommands].bExact := FALSE;
+nCommands := nCommands + 1;
+
+IF aPositionCmds[nCommands - 1].fPosZ <> fTargetZ THEN
+	aPositionCmds[nCommands].nNo   := 10*(nCommands + 1);
+	aPositionCmds[nCommands].fPosX := fTargetX;
+	aPositionCmds[nCommands].fPosY := fTargetY;
+	aPositionCmds[nCommands].fPosZ := fTargetZ; 
+	aPositionCmds[nCommands].fVelo := VELO * DEBUG_RATIO;
+	aPositionCmds[nCommands].bExact := FALSE;
+	nCommands := nCommands + 1;
+END_IF]]></ST>
+      </Implementation>
+    </Action>
+    <Method Name="M_AxesReady" Id="{a633a9db-a637-4c3c-a018-51beecf70ed5}">
+      <Declaration><![CDATA[METHOD M_AxesReady : BOOL
+VAR_INPUT
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF __ISVALIDREF(rAxisX) AND __ISVALIDREF(rAxisY) AND __ISVALIDREF(rAxisZ) THEN		
+	rAxisX.ReadStatus();
+	rAxisY.ReadStatus();
+	rAxisZ.ReadStatus();
+	IF rAxisX.Status.Operational AND rAxisY.Status.Operational AND rAxisZ.Status.Operational THEN
+		M_AxesReady := TRUE;
+	END_IF
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_AxisRef" Id="{53fd1ca7-f5f0-46ac-ad79-2c5954ae51ae}">
+      <Declaration><![CDATA[METHOD M_AxisRef
+VAR_INPUT
+	rX	: REFERENCE TO AXIS_REF;
+	rY	: REFERENCE TO AXIS_REF;
+	rZ	: REFERENCE TO AXIS_REF;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[
+rAxisX REF= rX;
+rAxisY REF= rY;
+rAxisZ REF= rZ;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_CancleJob" Id="{78bcd606-f31c-4393-9e11-f604b3b410b1}">
+      <Declaration><![CDATA[METHOD M_CancleJob
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF eState = E_NCI_State_RUN THEN
+	eState := E_NCI_State_ABORT;
+	bReset := TRUE;
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_Cyclic" Id="{448fea35-9f45-4de2-88ab-a3920d7d8428}">
+      <Declaration><![CDATA[METHOD M_Cyclic
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[THIS^();
+
+bBusy := eState <> E_NCI_State_IDLE
+	 AND eState <> E_NCI_State_ERROR
+	 AND eState <> E_NCI_State_ESTOP;
+	
+IF bReset THEN
+	fTargetX := 0;
+	fTargetY := 0;
+	fTargetZ := 0;
+	
+	fNextTargetX := 0;
+	fNextTargetY := 0;
+	fNextTargetZ := 0;
+END_IF
+]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_NewJob" Id="{0dd87fec-ed6d-4474-b526-8412f0666b44}">
+      <Declaration><![CDATA[METHOD M_NewJob
+VAR_INPUT
+	fTargetPosX	: LREAL;
+	fTargetPosY	: LREAL;
+	fTargetPosZ	: LREAL;
+END_VAR
+VAR
+	bTest	: BOOL;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF(fTargetPosX < 1 AND fTargetPosX > -1) AND (fTargetPosY < 1 AND fTargetPosY > -1) THEN
+	bTest := TRUE;
+END_IF
+fNextTargetX := fTargetPosX;
+fNextTargetY := fTargetPosY;
+fNextTargetZ := fTargetPosZ;
+
+]]></ST>
+      </Implementation>
+    </Method>
+    <Property Name="P_bInductiveSensor" Id="{daad5ee2-b32e-4387-ba1e-a797fb30b79a}">
+      <Declaration><![CDATA[PROPERTY P_bInductiveSensor : BOOL]]></Declaration>
+      <Set Name="Set" Id="{03cb5a62-eb15-4873-85ab-718d32836ff4}">
+        <Declaration><![CDATA[VAR
+END_VAR
+]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[bInductiveSensor := P_bInductiveSensor;]]></ST>
+        </Implementation>
+      </Set>
+    </Property>
+    <Property Name="P_Busy" Id="{81104fe3-1f03-492f-a63f-0630687afc88}">
+      <Declaration><![CDATA[PROPERTY P_Busy : BOOL
+]]></Declaration>
+      <Get Name="Get" Id="{268b8733-7f71-4268-b2ea-96d2577c70f4}">
+        <Declaration><![CDATA[VAR
+END_VAR
+]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[P_Busy := bBusy;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Property Name="P_Enable" Id="{86fd76d1-9260-4539-9683-4098b1939e4f}">
+      <Declaration><![CDATA[PROPERTY P_Enable : BOOL
+]]></Declaration>
+      <Set Name="Set" Id="{56726e9f-15e3-4bc0-ab91-328ea33ed466}">
+        <Declaration><![CDATA[VAR
+END_VAR
+]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[bEnable := P_Enable;]]></ST>
+        </Implementation>
+      </Set>
+    </Property>
+    <Property Name="P_ErrID" Id="{326b59f6-5e0c-48d7-b055-cc1b754c7bff}">
+      <Declaration><![CDATA[PROPERTY P_ErrID : E_ErrorIDs
+]]></Declaration>
+      <Get Name="Get" Id="{4e85683b-b78e-4315-bdda-b5339eff17ac}">
+        <Declaration><![CDATA[VAR
+END_VAR
+]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[P_ErrID := fbError.eErrorID;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Property Name="P_Error" Id="{83809be1-5134-4bb0-930b-b12981c8ce55}">
+      <Declaration><![CDATA[PROPERTY P_Error : BOOL
+]]></Declaration>
+      <Get Name="Get" Id="{e2eb45b2-a8bc-4478-ab5f-f3b42a79ab9a}">
+        <Declaration><![CDATA[VAR
+END_VAR
+]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[P_Error := fbError.bError;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Property Name="P_ErrSrc" Id="{9d806827-e76f-4e8d-849e-ff1f35ec8e2c}">
+      <Declaration><![CDATA[PROPERTY P_ErrSrc : E_ErrorSrcs
+]]></Declaration>
+      <Get Name="Get" Id="{5e4d97e3-1d96-4892-a73e-4ce2d0d43bf4}">
+        <Declaration><![CDATA[VAR
+END_VAR
+]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[P_ErrSrc := fbError.eErrorSrc;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Property Name="P_ReadyForJob" Id="{441a0e6b-0c73-44d9-9d28-1f972dcc86b5}">
+      <Declaration><![CDATA[{warning 'add property implementation'}
+PROPERTY P_ReadyForJob : BOOL
+]]></Declaration>
+      <Get Name="Get" Id="{6d3bd0b6-abbf-4989-971c-dce98974a125}">
+        <Declaration><![CDATA[VAR
+END_VAR
+]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[P_ReadyForJob := eState = E_NCI_State_IDLE AND M_AxesReady();]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Property Name="P_Reset" Id="{4fe5a293-ecb7-416e-aed1-6c245b67a254}">
+      <Declaration><![CDATA[
+PROPERTY P_Reset : BOOL
+]]></Declaration>
+      <Set Name="Set" Id="{684ab557-c8e2-4b7b-8de4-b082afc1b6ff}">
+        <Declaration><![CDATA[VAR
+END_VAR
+]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[bReset := P_Reset;]]></ST>
+        </Implementation>
+      </Set>
+    </Property>
+    <LineIds Name="FB_NciCtrl">
+      <LineId Id="224" Count="3" />
+      <LineId Id="1348" Count="0" />
+      <LineId Id="36" Count="0" />
+      <LineId Id="228" Count="0" />
+      <LineId Id="44" Count="0" />
+      <LineId Id="1406" Count="0" />
+      <LineId Id="384" Count="0" />
+      <LineId Id="1094" Count="0" />
+      <LineId Id="1220" Count="0" />
+      <LineId Id="1286" Count="1" />
+      <LineId Id="1289" Count="0" />
+      <LineId Id="1288" Count="0" />
+      <LineId Id="1221" Count="0" />
+      <LineId Id="1231" Count="0" />
+      <LineId Id="1230" Count="0" />
+      <LineId Id="1225" Count="4" />
+      <LineId Id="1224" Count="0" />
+      <LineId Id="1347" Count="0" />
+      <LineId Id="1223" Count="0" />
+      <LineId Id="1345" Count="1" />
+      <LineId Id="1091" Count="1" />
+      <LineId Id="1083" Count="0" />
+      <LineId Id="1077" Count="0" />
+      <LineId Id="45" Count="0" />
+      <LineId Id="846" Count="0" />
+      <LineId Id="48" Count="9" />
+      <LineId Id="62" Count="0" />
+      <LineId Id="283" Count="0" />
+      <LineId Id="63" Count="1" />
+      <LineId Id="490" Count="0" />
+      <LineId Id="489" Count="0" />
+      <LineId Id="65" Count="1" />
+      <LineId Id="282" Count="0" />
+      <LineId Id="71" Count="3" />
+      <LineId Id="281" Count="0" />
+      <LineId Id="231" Count="0" />
+      <LineId Id="237" Count="4" />
+      <LineId Id="248" Count="1" />
+      <LineId Id="252" Count="0" />
+      <LineId Id="873" Count="2" />
+      <LineId Id="253" Count="0" />
+      <LineId Id="850" Count="0" />
+      <LineId Id="254" Count="0" />
+      <LineId Id="905" Count="2" />
+      <LineId Id="485" Count="0" />
+      <LineId Id="256" Count="0" />
+      <LineId Id="484" Count="0" />
+      <LineId Id="1021" Count="0" />
+      <LineId Id="877" Count="1" />
+      <LineId Id="257" Count="0" />
+      <LineId Id="908" Count="1" />
+      <LineId Id="544" Count="0" />
+      <LineId Id="548" Count="0" />
+      <LineId Id="771" Count="0" />
+      <LineId Id="545" Count="0" />
+      <LineId Id="549" Count="0" />
+      <LineId Id="834" Count="2" />
+      <LineId Id="555" Count="1" />
+      <LineId Id="553" Count="0" />
+      <LineId Id="1164" Count="0" />
+      <LineId Id="973" Count="0" />
+      <LineId Id="1157" Count="0" />
+      <LineId Id="551" Count="0" />
+      <LineId Id="853" Count="3" />
+      <LineId Id="910" Count="0" />
+      <LineId Id="899" Count="0" />
+      <LineId Id="863" Count="0" />
+      <LineId Id="859" Count="0" />
+      <LineId Id="1165" Count="0" />
+      <LineId Id="857" Count="0" />
+      <LineId Id="861" Count="1" />
+      <LineId Id="864" Count="0" />
+      <LineId Id="866" Count="0" />
+      <LineId Id="869" Count="1" />
+      <LineId Id="900" Count="0" />
+      <LineId Id="902" Count="0" />
+      <LineId Id="904" Count="0" />
+      <LineId Id="901" Count="0" />
+      <LineId Id="858" Count="0" />
+      <LineId Id="697" Count="2" />
+      <LineId Id="871" Count="0" />
+      <LineId Id="838" Count="0" />
+      <LineId Id="887" Count="0" />
+      <LineId Id="839" Count="0" />
+      <LineId Id="766" Count="0" />
+      <LineId Id="1350" Count="0" />
+      <LineId Id="769" Count="0" />
+      <LineId Id="889" Count="2" />
+      <LineId Id="888" Count="0" />
+      <LineId Id="767" Count="0" />
+      <LineId Id="764" Count="0" />
+      <LineId Id="617" Count="0" />
+      <LineId Id="893" Count="0" />
+      <LineId Id="960" Count="4" />
+      <LineId Id="1095" Count="0" />
+      <LineId Id="1349" Count="0" />
+      <LineId Id="969" Count="0" />
+      <LineId Id="972" Count="0" />
+      <LineId Id="970" Count="0" />
+      <LineId Id="898" Count="0" />
+      <LineId Id="304" Count="0" />
+      <LineId Id="323" Count="0" />
+      <LineId Id="321" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_NciCtrl.A_PrepareTable">
+      <LineId Id="2" Count="14" />
+      <LineId Id="19" Count="2" />
+      <LineId Id="23" Count="0" />
+      <LineId Id="99" Count="2" />
+      <LineId Id="24" Count="0" />
+      <LineId Id="26" Count="14" />
+      <LineId Id="102" Count="9" />
+      <LineId Id="52" Count="0" />
+      <LineId Id="134" Count="0" />
+      <LineId Id="132" Count="0" />
+      <LineId Id="53" Count="7" />
+      <LineId Id="139" Count="0" />
+      <LineId Id="62" Count="4" />
+      <LineId Id="112" Count="9" />
+      <LineId Id="78" Count="8" />
+      <LineId Id="122" Count="9" />
+      <LineId Id="98" Count="0" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_NciCtrl.A_SetPosCommands">
+      <LineId Id="14" Count="0" />
+      <LineId Id="16" Count="2" />
+      <LineId Id="15" Count="0" />
+      <LineId Id="26" Count="0" />
+      <LineId Id="43" Count="0" />
+      <LineId Id="27" Count="0" />
+      <LineId Id="2" Count="1" />
+      <LineId Id="28" Count="0" />
+      <LineId Id="49" Count="0" />
+      <LineId Id="8" Count="1" />
+      <LineId Id="41" Count="0" />
+      <LineId Id="22" Count="0" />
+      <LineId Id="20" Count="0" />
+      <LineId Id="58" Count="0" />
+      <LineId Id="29" Count="0" />
+      <LineId Id="45" Count="0" />
+      <LineId Id="30" Count="1" />
+      <LineId Id="53" Count="0" />
+      <LineId Id="57" Count="0" />
+      <LineId Id="55" Count="0" />
+      <LineId Id="32" Count="0" />
+      <LineId Id="47" Count="0" />
+      <LineId Id="10" Count="0" />
+      <LineId Id="13" Count="0" />
+      <LineId Id="35" Count="0" />
+      <LineId Id="44" Count="0" />
+      <LineId Id="36" Count="3" />
+      <LineId Id="48" Count="0" />
+      <LineId Id="1" Count="0" />
+      <LineId Id="34" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_NciCtrl.M_AxesReady">
+      <LineId Id="7" Count="0" />
+      <LineId Id="9" Count="5" />
+      <LineId Id="5" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_NciCtrl.M_AxisRef">
+      <LineId Id="17" Count="2" />
+      <LineId Id="9" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_NciCtrl.M_CancleJob">
+      <LineId Id="8" Count="0" />
+      <LineId Id="4" Count="0" />
+      <LineId Id="7" Count="0" />
+      <LineId Id="9" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_NciCtrl.M_Cyclic">
+      <LineId Id="7" Count="0" />
+      <LineId Id="24" Count="1" />
+      <LineId Id="48" Count="1" />
+      <LineId Id="51" Count="0" />
+      <LineId Id="58" Count="3" />
+      <LineId Id="64" Count="0" />
+      <LineId Id="62" Count="1" />
+      <LineId Id="57" Count="0" />
+      <LineId Id="54" Count="0" />
+      <LineId Id="22" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_NciCtrl.M_NewJob">
+      <LineId Id="61" Count="0" />
+      <LineId Id="68" Count="1" />
+      <LineId Id="19" Count="1" />
+      <LineId Id="9" Count="0" />
+      <LineId Id="79" Count="0" />
+      <LineId Id="78" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_NciCtrl.P_bInductiveSensor.Set">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_NciCtrl.P_Busy.Get">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_NciCtrl.P_Enable.Set">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_NciCtrl.P_ErrID.Get">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_NciCtrl.P_Error.Get">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_NciCtrl.P_ErrSrc.Get">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_NciCtrl.P_ReadyForJob.Get">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_NciCtrl.P_Reset.Set">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

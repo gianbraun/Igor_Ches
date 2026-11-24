@@ -1,0 +1,29 @@
+Regelwerk orientiert sich an International Checkers, außer dass das Feld nur 8x8 statt 10x10 groß ist:
+ 
+Ziel: Gegner kann keinen Zug machen (keine Steine mehr oder alle Steine bewegungsunfähig)
+ 
+1.  Ein Spieler darf nur seine eigenen auf dem Spielfeld befindlichen Steine bewegen
+2.  ALLE Steine dürfen nur diagonal auf dem Spielbrett bewegt werden
+3.  Ein Spieler darf seine Steine nur in Richtung der gegnerischen Grundlinie bewegen, außer es ist eine Dame
+ 
+Springen
+4.  Gegnerische Steine, die sich direkt diagonal vor dem eigenen Stein befinden dürfen übersprungen werden, FALLS wiederum direkt hinter diesem 
+    gegnerischen Stein ein freies Feld ist
+
+5.  Wird ein Stein von einem gegnerischen Stein übersprungen, wird er vom Spielfeld entfernt
+6.  Nach dem Springen ist es erlaubt, einen weiteren Sprung auszuführen, solange Regel 4 erfüllt ist
+a.  Dabei ist Regel 3 außer Kraft gesetzt, es darf auch in Richtung eigener Grundlinie gesprungen werden
+7.  Es muss der Zug gewählt werden, bei dem die meisten Sprünge ausgeführt werden
+ 
+Dame-Regeln
+8.  Befindet sich ein Stein am ENDE des Zuges (! -> beachte Regel 5a) an der gegnerischen Grundlinie, wird der Stein zur Dame
+9.  Eine Dame darf beliebig weit in beliebige (diagonale) Richtung bewegt werden, außer:
+    a.  Ein eigener Stein ist im Weg
+    b.  Mehr als ein gegnerischer Stein ist im Weg
+    c.  Hinter dem gegnerischen Stein ist kein freies Feld
+10. Siehe Regel 4, außer dass 
+    a.  der gegnerische Stein auf einem beliebigen Feld auf derselben Diagonalen wie die Dame liegen kann
+    b.  bis zum Zielfeld alle Felder frei sein müssen (wegen Regeln 7 a-c)
+
+
+

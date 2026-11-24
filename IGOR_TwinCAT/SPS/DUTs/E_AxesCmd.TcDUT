@@ -1,0 +1,19 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.9">
+  <DUT Name="E_AxesCmd" Id="{1d7a2ba3-a684-457c-80bd-f6671b77ed28}">
+    <Declaration><![CDATA[TYPE E_AxesCmd :
+(
+	E_AxesCmd_IDLE := 0,
+	E_AxesCmd_RESET := 10,
+	E_AxesCmd_MOVE_ABS := 20,
+	E_AxesCmd_MOVE_REL := 30,
+	E_AxesCmd_JOG := 40,
+	E_AxesCmd_REFERENCING := 50,
+	E_AxesCmd_STOP := 70,
+	E_AxesCmd_FINISHED := 80,
+	E_AxesCmd_ERROR := 99
+);
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

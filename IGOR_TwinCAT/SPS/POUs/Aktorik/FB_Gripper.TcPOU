@@ -1,0 +1,187 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.9">
+  <POU Name="FB_Gripper" Id="{224aadc4-30bf-4d9b-aa7c-7ffbd1426658}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Gripper
+VAR_INPUT
+	bEnable:					BOOL;
+	bClose:						BOOL;
+	bOpen:						BOOL;
+END_VAR                     	
+VAR_OUTPUT                  	
+	fbError:					FB_Error;	
+	bStoneInGripper:			BOOL;
+	bPartSensor			AT %I*:	BOOL;
+	bBusy:						BOOL;	
+END_VAR                     	
+VAR CONSTANT                	
+	GRIPPER_MOVE_TIME:			TIME := T#120MS;
+	GRIPPER_TIMEOUT:			TIME := T#300MS;
+END_VAR
+VAR
+	eState:						E_GripperState;
+	bGripperOpen:				BOOL; //kein Sensor
+	bGripperClosed:				BOOL; //kein Sensor
+	bGripperFullClosed	AT %I*:	BOOL;	
+	bOpenGripper		AT %Q*:	BOOL;	
+	bCloseGripper		AT %Q*:	BOOL;
+	fbTimer:					TON := (PT := GRIPPER_TIMEOUT);
+	
+(* ******** SIMULATION ************* *)	
+	fbTimerSimu:				TON := (PT := GRIPPER_MOVE_TIME);
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[CASE eState OF
+(* ******** INITIALISIERUNG ************* *)	
+	E_GripperState_INIT:
+		IF bGripperClosed THEN
+			eState := E_GripperState_CLOSED;
+		ELSIF bGripperOpen THEN
+			eState := E_GripperState_OPENED;
+		ELSE
+			eState := E_GripperState_UNDEFINED;
+		END_IF
+		
+(* ******** GREIFER ÖFFNET ************* *)		
+	E_GripperState_OPENING:
+		IF NOT bEnable THEN
+			bOpenGripper := FALSE;
+			eState := E_GripperState_UNDEFINED;
+		ELSIF NOT bClose AND bOpen THEN
+			IF bGripperOpen THEN
+				bOpenGripper := FALSE;
+				eState := E_GripperState_OPENED;
+				fbError.M_Reset();
+			END_IF
+		ELSIF NOT bClose AND NOT bOpen OR bClose AND bOpen THEN
+			bOpenGripper := FALSE;
+			eState := E_GripperState_UNDEFINED;
+		ELSIF bClose AND NOT bOpen THEN
+			bOpenGripper := FALSE;
+			bCloseGripper := TRUE;
+			eState := E_GripperState_CLOSING;
+		END_IF
+		
+(* ******** GREIFER OFFEN ************* *)	
+	E_GripperState_OPENED:
+		IF bClose AND NOT bOpen THEN
+			bCloseGripper := TRUE;
+			eState := E_GripperState_CLOSING;
+		END_IF
+		
+(* ******** GREIFER SCHLIEßT ************* *)	
+	E_GripperState_CLOSING:
+		IF NOT bEnable THEN
+			bCloseGripper := FALSE;
+			eState := E_GripperState_UNDEFINED;
+		ELSIF bClose AND NOT bOpen THEN
+			IF bGripperClosed THEN
+				eState := E_GripperState_CLOSED;
+				fbError.M_Reset();
+			END_IF
+		ELSIF NOT bClose AND NOT bOpen OR bClose AND bOpen THEN
+			bCloseGripper := FALSE;
+			eState := E_GripperState_UNDEFINED;
+		ELSIF NOT bClose AND bOpen THEN
+			bCloseGripper := FALSE;
+			bOpenGripper := TRUE;
+			eState := E_GripperState_OPENING;
+		END_IF
+		
+(* ******** GREIFER GESCHLOSSEN ************* *)	
+	E_GripperState_CLOSED:
+		IF bOpen AND NOT bClose THEN
+			bCloseGripper := FALSE;
+			bOpenGripper := TRUE;
+			eState := E_GripperState_OPENING;
+		END_IF
+		
+(* ******** GREIFER POSITION UNDEFINIERT ************* *)	
+	E_GripperState_UNDEFINED: //Position zwischen den Endlagen
+		IF bClose AND NOT bOpen AND NOT bGripperClosed THEN
+			bCloseGripper := TRUE;
+			eState := E_GripperState_CLOSING;
+		END_IF
+		IF bOpen AND NOT bClose AND NOT bGripperOpen THEN
+			bOpenGripper := TRUE;
+			eState := E_GripperState_OPENING;
+		END_IF
+
+END_CASE
+
+bBusy := eState = E_GripperState_CLOSING OR eState = E_GripperState_OPENING;
+
+(* ******** TIMEOUT CHECK ************* *)	
+fbTimer(IN := eState = E_GripperState_OPENING
+			OR eState = E_GripperState_CLOSING);
+IF fbTimer.Q THEN
+	IF eState = E_GripperState_OPENING THEN
+		fbError.M_Set(1817, 'Greifer erreicht Endposition beim Oeffnen nicht!', eState, eID := E_ErrorIDs.eTimeout, eSrc := E_ErrorSrcs.eGripper);
+	ELSIF eState = E_GripperState_CLOSING THEN
+		fbError.M_Set(1817, 'Greifer erreicht Endposition beim Schliessen nicht!', eState, eID := E_ErrorIDs.eTimeout, eSrc := E_ErrorSrcs.eGripper);
+	END_IF
+END_IF
+
+(* ******** OUTPUT CHECK ************* *)
+IF bGripperClosed AND bGripperOpen
+	OR bOpenGripper AND bCloseGripper THEN
+	fbError.M_Set(1798, 'Ungültige IO Daten', eState, eID := E_ErrorIDs.eInvalidData, eSrc := E_ErrorSrcs.eGripper);
+END_IF
+
+(* ******** SIMULATION ************* *)	
+fbTimerSimu(IN := eState = E_GripperState_OPENING OR eState = E_GripperState_CLOSING);
+IF bGripperFullClosed THEN
+	bStoneInGripper := FALSE;
+	bGripperClosed := TRUE;
+ELSIF fbTimerSimu.Q THEN
+	IF eState = E_GripperState_OPENING THEN
+		bGripperClosed := FALSE;
+		bStoneInGripper := FALSE;
+		bGripperOpen := TRUE;
+	END_IF
+	IF eState = E_GripperState_CLOSING THEN
+		bStoneInGripper := TRUE;
+		bGripperOpen := FALSE;
+		bGripperClosed := TRUE;
+	END_IF
+ELSE
+	IF eState <> E_GripperState_CLOSED THEN
+		bGripperClosed := FALSE;
+		bStoneInGripper := FALSE;
+	END_IF
+	IF eState <> E_GripperState_OPENED THEN
+		bGripperOpen := FALSE;
+	END_IF
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="FB_Gripper">
+      <LineId Id="356" Count="44" />
+      <LineId Id="402" Count="14" />
+      <LineId Id="508" Count="0" />
+      <LineId Id="417" Count="20" />
+      <LineId Id="583" Count="0" />
+      <LineId Id="438" Count="5" />
+      <LineId Id="445" Count="5" />
+      <LineId Id="454" Count="1" />
+      <LineId Id="458" Count="0" />
+      <LineId Id="570" Count="0" />
+      <LineId Id="596" Count="0" />
+      <LineId Id="598" Count="1" />
+      <LineId Id="566" Count="0" />
+      <LineId Id="585" Count="0" />
+      <LineId Id="649" Count="0" />
+      <LineId Id="651" Count="0" />
+      <LineId Id="574" Count="0" />
+      <LineId Id="576" Count="0" />
+      <LineId Id="588" Count="0" />
+      <LineId Id="592" Count="0" />
+      <LineId Id="650" Count="0" />
+      <LineId Id="601" Count="0" />
+      <LineId Id="609" Count="0" />
+      <LineId Id="641" Count="0" />
+      <LineId Id="643" Count="5" />
+      <LineId Id="642" Count="0" />
+      <LineId Id="536" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

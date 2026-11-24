@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net5.0-windows</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="GameCamViewModel.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Prism.Core" Version="8.1.97" />
+    <PackageReference Include="Prism.Wpf" Version="8.1.97" />
+    <PackageReference Include="Serilog" Version="2.10.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Common\IGOR.Common\IGOR.Common.csproj" />
+    <ProjectReference Include="..\IGOR.Interface.Communication\IGOR.Interface.Communication.csproj" />
+    <ProjectReference Include="..\IGOR.Interface.Navigation\IGOR.Interface.Navigation.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,56 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <DUT Name="E_ErrorIDs" Id="{649a0ce5-9e91-4968-9e88-ca1fda4dbc33}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE E_ErrorIDs :
+(
+	eNoError := 0,
+	eUndefinedError := 1,
+	eUndefinedState := 2,
+	
+	eInvalidReference := 21,
+	
+	eAxisRelease := 31,
+	eAbsMove := 32,
+	eRelMove := 33,
+	eJog := 34,
+	eStopAxis := 35,
+	eResetAxis := 36,
+	eAxesNotReady := 37,
+	eAxisError := 38,
+	
+	eTimeout := 41,
+	eInvalidData := 42,
+	eReset := 43,
+	
+	eBuildGroup := 51,
+	eClearGroup := 52,
+	eFillTable := 53,
+	eNotAllowedDriveDown := 54,
+	
+	eSafetyFbError := 61,
+	eCommError := 62,
+	eModuleFault := 63,
+	eCompareError := 64,
+	eEStopPressed := 65,
+	eLightCurtain := 66,
+	
+	eNoStoneInGripper := 71,
+	eMagEmpty := 72,
+	
+	eFuseTripped := 81,
+	eFuseOff := 82,
+	eFuseOvercurrent := 83,
+	
+	eClearFieldNoCapacityFound := 90,
+	eNoJobsFound := 91,
+	eStamp := 92,
+	eNoStonesFound := 93,
+	
+	eCtrlOff := 99
+);
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

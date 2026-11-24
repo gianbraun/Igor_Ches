@@ -1,0 +1,1479 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="FB_Portal" Id="{18d1828e-5992-4277-8a1c-66c38aa89f04}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Portal
+VAR_INPUT
+	bManualMode:			BOOL;	                    	
+	stNewJob:				ST_PortalJob;
+	bImportJob:				BOOL;
+	bQuit:					BOOL;
+	bFuseOk:				BOOL;
+	bFuse48VOk:				BOOL;
+	bSafetyRun AT %Q*:		BOOL;
+END_VAR
+VAR CONSTANT	
+END_VAR                 	
+VAR_OUTPUT          		
+	bBusy:					BOOL;
+	fbError:				FB_Error;
+	                    	
+	//Safety            	
+	bSafetyOK AT %I*:		BOOL := TRUE;
+END_VAR             		
+VAR                     
+	//Safety            	
+	bQuitEStop AT %Q*:		BOOL;
+	bSafetyErrAck AT %Q*:	BOOL;
+	
+	//Sensor Stempeln		
+	bStampZAxis				AT %I*	: BOOL;
+	rTrigStamp:				R_TRIG;
+	bStampReset: 			BOOL;
+	
+	fbRTrigSafety:			R_TRIG;
+	                    	
+	ePortalState:			E_PortalState_New;
+	eTargetPortalState: 	E_PortalState_New;
+	                    	
+	fbGripper:				FB_Gripper := (bEnable := TRUE);
+  
+	aAxis:					ARRAY [X..Z] OF AXIS_REF;
+	fbAxesEnable:			FB_AxesEnable;
+	fbResetAxis:			MC_Reset; 
+	                    	
+	ipNcCtrl:				I_NC_Ctrl;
+	fbNciCtrl:				FB_NciCtrl;
+	                    	
+	bMagazineTrack:			BOOL; //Anzahl steine in Magazinen bekannt? false wenn Spieler eingreift oder nicht initialisiert
+	                    	
+	stActJob:				ST_PortalJob;
+	aJobBuffer:				ARRAY [0..MAX_JOB_COUNT - 1] OF ST_PortalJob;
+	nJobCount:				USINT;
+	i, k:					USINT;
+	                    	
+	aMagCounter:			ARRAY [0..MAGAZINE_NUMBER-1] OF USINT; //Anzahl Steine in Magazinen
+	aMagSkipCheck:			ARRAY [0..MAGAZINE_NUMBER-1] OF BOOL;
+	aMagYPositions:			ARRAY [0..MAGAZINE_NUMBER-1] OF LREAL; //Mitte Y
+	aMagYScanPositions:		ARRAY [0..MAGAZINE_NUMBER-1] OF LREAL;
+	fStonePosZFromMag:		LREAL; //berechnete Z pos für Stein aus Magazin
+	nMag:					INT;
+	nSelectedMag:			INT;
+	nPosInMag:				USINT;
+	bValidateStonePos:		BOOL;
+	nValidationValue:		INT;
+	bLastJobBlack:			BOOL;
+	
+//MAG Check
+	nStonesInMag:				INT := MAGAZINE_CAPACITY;
+	bWaitPortal, bCheck:		BOOL;
+	bCheckedAllMag: 	BOOL;
+	nNumChecked:				INT;
+	rTrigCheck:			R_TRIG;
+//New
+	nCntActiveJobs		: SINT;
+	nCntRemoveStones	: SINT;
+	eCheckMagState		: E_CheckMagazines_New;
+	nStonesInMagazin	: USINT := MAGAZINE_CAPACITY;
+	
+	bAllJobsReceived	: BOOL;
+	
+	nStateJobSelect		: INT;
+	
+	bReady				: BOOL;
+	
+	fTrigNCIDone		: F_TRIG;
+	
+	fSetJobHeight	: LREAL;
+	
+	bNCIJobStarted : BOOL;
+	
+	eSetJobState	: E_SetJobState;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF ipNcCtrl <> 0 THEN
+	A_Cycle();
+ELSIF ePortalState <> E_PortalState_INIT THEN
+	fbError.M_Set(1, 'Interface nicht referenziert', ePortalState, E_ErrorIDs.eInvalidReference, E_ErrorSrcs.ePlc);
+	RETURN;
+END_IF
+fTrigNCIDone(CLK := fbNciCtrl.P_Busy);
+
+CASE ePortalState OF
+	E_PortalState_New.eInit:
+		A_Init();
+		ePortalState := E_PortalState_New.eIdle;
+		
+	E_PortalState_New.eIdle:
+		IF NOT bManualMode THEN
+			IF aJobBuffer[0].nJobID <> 0 THEN
+				fbAxesEnable.M_EnableAxes();
+				IF fbGripper.bGripperOpen THEN
+					IF HMI.bAllJobsSend THEN	
+						nValidationValue := 0;	//TODO: entfernen wenn eSetJobState verwendet
+						bReady := FALSE;
+						nNumChecked := 0;		//TODO: entfernen wenn eSetJobState verwendet
+						nStateJobSelect := 0;
+						ePortalState := E_PortalState_New.eSetJob;
+					END_IF
+				ELSE
+					eTargetPortalState := E_PortalState_New.eIdle;
+					ePortalState := E_PortalState_New.eOpenGripper;
+				END_IF
+			END_IF
+		ELSE	//Handbetrieb
+			ipNcCtrl.P_Enable := FALSE;
+			fbAxesEnable.M_EnableAxes();
+			ePortalState := E_PortalState_New.eManualMode;
+		END_IF
+	
+	E_PortalState_New.eOpenGripper:
+		fbGripper(bEnable := TRUE, bOpen := TRUE, bClose := FALSE);
+		IF NOT fbGripper.bBusy AND fbGripper.bGripperOpen THEN
+			IF eTargetPortalState = E_PortalState_New.eIdle THEN
+				fbGripper(bOpen := FALSE);
+				ePortalState := eTargetPortalState;	
+			ELSE
+				IF NOT fbGripper.fbError.bError THEN
+					IF stActJob.nJobID <> 0 THEN	//aktuellen Auftrag umgesetzt
+						IF stActJob.eJobType = E_JobType.E_JobType_RemoveStone AND nCntActiveJobs = 1 THEN
+							aMagCounter[nSelectedMag] := aMagCounter[nSelectedMag] + nCntRemoveStones;
+							nCntRemoveStones := 0;
+						END_IF
+						nCntActiveJobs := nCntActiveJobs - 1;
+						HMI.stLastJob := stActJob;
+						A_DequeueJob();
+						IF nCntActiveJobs <= 0 THEN
+							bReady := FALSE;
+						END_IF
+					ELSE
+						bReady := FALSE;
+					END_IF
+					IF nJobCount = 0 THEN
+						ipNcCtrl.M_NewJob(HMI.fPortalPosIdleX, HMI.fPortalPosIdleY, HMI.fPortalPosIdleZ); //Auftrag zu Home-Pos
+						ePortalState := E_PortalState_New.eHome;
+					ELSE
+						ePortalState := E_PortalState_New.eSetJob;	
+					END_IF			
+				ELSE
+					fbError := fbGripper.fbError;
+					ePortalState := E_PortalState_New.eError;		
+				END_IF
+			END_IF
+		END_IF
+		
+	E_PortalState_New.eSetJob:
+		HMI.bAllJobsSend := FALSE;
+		IF bReady THEN
+			//Weiterer Auftrag in Auftragsreihenfolge
+			IF nCntActiveJobs >= 1 AND aJobBuffer[0].eJobType = E_JobType.E_JobType_NewStone THEN 
+				aJobBuffer[0].fStartPosX := stActJob.fDestPosX;
+				aJobBuffer[0].fStartPosY := stActJob.fDestPosY;
+				stActJob := aJobBuffer[0];
+				
+				eTargetPortalState := E_PortalState_New.eMoveToStone;
+				ePortalState := E_PortalState_New.eDebug;
+				fSetJobHeight := STONE_POS_FIELD_Z + STONE_HEIGHT;
+				
+				//ipNcCtrl.M_NewJob(stActJob.fStartPosX, stActJob.fStartPosY, STONE_POS_FIELD_Z + STONE_HEIGHT);
+				//ePortalState := E_PortalState_New.eMoveToStone;
+			//Weiterer Auftrag in Auftragsreihenfolge
+			ELSIF nCntActiveJobs >= 1 AND aJobBuffer[0].eJobType = E_JobType.E_JobType_RemoveStone THEN 
+				aJobBuffer[0].fStartPosX := stActJob.fDestPosX;
+				aJobBuffer[0].fStartPosY := stActJob.fDestPosY;
+				stActJob := aJobBuffer[0];
+				
+				eTargetPortalState := E_PortalState_New.eMoveToStone;
+				ePortalState := E_PortalState_New.eDebug;
+				fSetJobHeight := STONE_POS_FIELD_Z; 
+				
+				//ipNcCtrl.M_NewJob(stActJob.fStartPosX, stActJob.fStartPosY, STONE_POS_FIELD_Z);
+				//ePortalState := E_PortalState_New.eMoveToStone;
+			END_IF
+		ELSE
+			nStateJobSelect := M_SetJob_New();
+			CASE nStateJobSelect OF
+				-1: ePortalState := E_PortalState_New.eEStop;
+				0: bReady := FALSE;
+				1: bReady := TRUE;
+					//Mehr als ein gleichzeitiger Auftrag (NewStone)
+					IF nCntActiveJobs >= 1 AND aJobBuffer[0].eJobType = E_JobType.E_JobType_NewStone THEN		
+						stActJob := aJobBuffer[0];
+						//ipNcCtrl.M_NewJob(stActJob.fStartPosX, stActJob.fStartPosY, fStonePosZFromMag);
+						//ePortalState := E_PortalState_New.eMoveToStone;
+						fSetJobHeight := fStonePosZFromMag;
+						eTargetPortalState := E_PortalState_New.eMoveToStone;
+						ePortalState := E_PortalState_New.eDebug;
+					//Mehr als ein gleichzeitiger Auftrag (RemoveStone)
+					ELSIF nCntActiveJobs >= 1 AND aJobBuffer[0].eJobType = E_JobType.E_JobType_RemoveStone THEN
+						stActJob := aJobBuffer[0];
+						//ipNcCtrl.M_NewJob(stActJob.fStartPosX, stActJob.fStartPosY, STONE_POS_FIELD_Z);
+						//ePortalState := e_PortalState_New.eMoveToStone;
+						fSetJobHeight := STONE_POS_FIELD_Z;
+						eTargetPortalState := E_PortalState_New.eMoveToStone;
+						ePortalState := E_PortalState_New.eDebug;
+					//Normaler MoveStone-Auftrag
+					ELSIF nCntActiveJobs <= -1 THEN	
+						stActJob := aJobBuffer[0];
+						ipNcCtrl.M_NewJob(stActJob.fStartPosX, stActJob.fStartPosY, STONE_POS_FIELD_Z);
+						ePortalState := E_PortalState_New.eMoveToStone;
+					ELSE
+						ipNcCtrl.M_NewJob(HMI.fPortalPosIdleX, HMI.fPortalPosIdleY, HMI.fPortalPosIdleZ);
+						ePortalState := E_PortalState_New.eHome; //oder Error???
+					END_IF
+			END_CASE
+		END_IF
+			
+	E_PortalState_New.eDebug:
+		IF NOT ipNcCtrl.P_Busy THEN
+			ipNcCtrl.M_NewJob(stActJob.fStartPosX, stActJob.fStartPosY, fSetJobHeight);
+			ePortalState := eTargetPortalState;
+		END_IF
+	
+	E_PortalState_New.eMoveToStone:
+		IF NOT ipNcCtrl.P_Busy THEN 				//Warten bis Position erreicht
+			IF ipNcCtrl.P_Error THEN				//Error
+				fbError.M_Set(1, 'Achsenfehler', ePortalState, eID := ipNcCtrl.P_ErrID, eSrc := ipNcCtrl.P_ErrSrc);
+				ePortalState := E_PortalState_New.eError;
+			ELSE
+				eTargetPortalState := E_PortalState_New.eTrspStone;
+				ePortalState := E_PortalState_New.eCloseGripper;
+			END_IF 
+		END_IF
+		
+	E_PortalState_New.eCloseGripper:
+		fbGripper(bEnable := TRUE, bClose := TRUE, bOpen := FALSE);
+		IF NOT fbGripper.bBusy AND fbGripper.bGripperClosed THEN
+			IF NOT fbGripper.fbError.bError THEN
+				fbGripper(bClose := FALSE);
+				IF fbGripper.bStoneInGripper THEN //Stein von Teilesensor erkannt
+					IF stActJob.eJobType = E_JobType_NewStone THEN //Stein aus Magazin entnommen
+						IF NOT bStampReset THEN
+							aMagCounter[nSelectedMag] := aMagCounter[nSelectedMag] - 1;
+						ELSE
+							bStampReset := FALSE;
+						END_IF
+						ipNcCtrl.M_NewJob(stActJob.fDestPosX, stActJob.fDestPosY, STONE_POS_FIELD_Z); 
+					ELSIF stActJob.eJobType = E_JobType.E_JobType_RemoveStone AND nCntActiveJobs > 1 AND aJobBuffer[1].fStartPosX <> 0 AND aJobBuffer[1].fStartPosY <> 0 THEN
+						stActJob.fDestPosX := aJobBuffer[1].fStartPosX;
+						stActJob.fDestPosY := aJobBuffer[1].fStartPosY;
+						ipNcCtrl.M_NewJob(stActJob.fDestPosX, stActJob.fDestPosY, STONE_POS_FIELD_Z + STONE_HEIGHT);
+					ELSIF (stActJob.eJobType = E_JobType.E_JobType_RemoveStone AND nCntActiveJobs = 1) OR (stActJob.eJobType = E_JobType.E_JobType_RemoveStone AND aJobBuffer[1].fStartPosX <> 0 AND aJobBuffer[1].fStartPosY <> 0) THEN
+						stActJob.fDestPosX := STACK_POS_X;
+						stActJob.fDestPosY := aMagYPositions[nSelectedMag];
+						ipNcCtrl.M_NewJob(stActJob.fDestPosX, stActJob.fDestPosY, STACK_POS_Z_BASE_REMOVE + (nPosInMag-1)*STONE_HEIGHT);
+					ELSIF stActJob.eJobType =  E_JobType.E_JobType_MoveStone THEN
+						ipNcCtrl.M_NewJob(stActJob.fDestPosX, stActJob.fDestPosY, STONE_POS_FIELD_Z); 
+					END_IF
+					ePortalState := eTargetPortalState;					
+				ELSE
+					fbError.M_Set(1804, 'Keinen Stein gegriffen!', ePortalState, eID := E_ErrorIDs.eNoStoneInGripper, eSrc := E_ErrorSrcs.eGripper);
+					fbGripper(bOpen := TRUE);
+					IF aJobBuffer[0].nJobID = 0 THEN
+						ePortalState := E_PortalState_New.eIdle;
+					ELSE
+						bReady := FALSE;
+						ePortalState := E_PortalState_New.eSetJob;
+					END_IF
+				END_IF
+			ELSE
+				fbError := fbGripper.fbError;
+				ePortalState := E_PortalState_New.eError;
+			END_IF
+		END_IF
+	
+	E_PortalState_New.eTrspStone:
+		IF NOT ipNcCtrl.P_Busy THEN
+			IF ipNcCtrl.P_Error THEN
+				fbError.M_Set(1, 'Achsenfehler', ePortalState, eID := ipNcCtrl.P_ErrID, eSrc := ipNcCtrl.P_ErrSrc);
+				ePortalState := E_PortalState_New.eError;
+			ELSE
+				ePortalState := E_PortalState_New.eOpenGripper;
+			END_IF 
+		END_IF
+		
+	E_PortalState_New.eError:
+		// TODO: Was passiert hier???
+	
+	E_PortalState_New.eStampTriggered:
+		IF NOT ipNcCtrl.P_Busy THEN 
+			IF ipNcCtrl.P_Error THEN 	
+				fbError.M_Set(1, 'Achsfehler', ePortalState, eID := ipNcCtrl.P_ErrID, eSrc := ipNcCtrl.P_ErrSrc);
+				ePortalState := E_PortalState_New.eError;
+			ELSE
+				fbError.M_Set(1, 'Federung ausgelöst', ePortalState, eID := E_ErrorIDs.eStamp, eSrc := E_ErrorSrcs.ePortal);
+				IF aJobBuffer[0].nJobID <> 0 AND aJobBuffer[0].eJobType = E_JobType.E_JobType_RemoveStone THEN
+					ePortalState := E_PortalState_New.eSetJob;
+				ELSIF aJobBuffer[0].nJobID = 0 THEN
+					ePortalState := E_PortalState_New.eIdle;
+				ELSIF aJobBuffer[0].nJobID <> 0 AND aJobBuffer[0].eJobType = E_JobType.E_JobType_MoveStone THEN
+					ipNcCtrl.M_NewJob(fTargetPosX := aAxis[X].NcToPlc.ActPos, fTargetPosY := aAxis[Y].NcToPlc.ActPos, fTargetPosZ := aAxis[Z].NcToPlc.ActPos+ 10);
+					eTargetPortalState := E_PortalState_New.eTrspStone;
+				ELSIF aJobBuffer[0].nJobID <> 0 AND aJobBuffer[0].eJobType = E_JobType.E_JobType_NewStone THEN
+					ePortalState := E_PortalState_New.eSetJob; //TODO: testen?
+				END_IF
+			END_IF 
+		ELSE
+			ipNcCtrl.M_CancleJob();
+		END_IF
+		
+	E_PortalState_New.eHome:
+		IF NOT ipNcCtrl.P_Busy THEN
+			IF ipNcCtrl.P_Error THEN
+				fbError.M_Set(1, 'Achsenfehler', ePortalState, eID := ipNcCtrl.P_ErrID, eSrc := ipNcCtrl.P_ErrSrc);
+				ePortalState := E_PortalState_New.eError;
+			ELSE
+				fbAxesEnable.M_DisableAxes();
+				ePortalState := E_PortalState_New.eIdle;
+			END_IF 
+		END_IF
+		
+	E_PortalState_New.eManualMode:
+		A_CollsionAvoidance();
+		fbGripper(bEnable := TRUE, bClose := HMI.bCloseGripper, bOpen := HMI.bOpenGripper);
+		IF NOT bManualMode THEN
+			fbGripper(bEnable := TRUE, bClose := FALSE, bOpen := FALSE);
+			fbAxesEnable.M_EnableAxes();
+			ipNcCtrl.P_Enable := TRUE;
+			IF fbAxesEnable.bAllAxesReady THEN
+				ipNcCtrl.M_NewJob(HMI.fPortalPosIdleX, HMI.fPortalPosIdleY, HMI.fPortalPosIdleZ); //Auftrag an Achsen geben: Grundposition anfahren
+				ePortalState := E_PortalState_New.eHome;
+			END_IF
+		END_IF
+		
+	E_PortalState_New.eEStop:		
+		IF NOT ipNcCtrl.P_Busy THEN
+			//ipNcCtrl.M_CancleJob();	//TODO: neu testen
+			fbAxesEnable.M_DisableAxes();
+		END_IF
+		IF bSafetyOK THEN
+			IF fbError.bError THEN
+				ePortalState := E_PortalState_New.eError;
+			ELSE
+				bCheck := FALSE;
+				bCheckedAllMag := FALSE;
+				eCheckMagState := E_CheckMagazines_New.eIdle;
+				eSetJobState := E_SetJobState.eIdle;;
+				nStonesInMag := MAGAZINE_CAPACITY;
+				IF M_IsHomed() THEN
+					ePortalState := E_PortalState_New.eIdle;
+					nCntActiveJobs := 0;		//TODO: Werte hier notwendig/richtig?
+					nCntRemoveStones := 0;
+					HMI.bAllJobsSend := FALSE;
+				ELSE
+					ePortalState := E_PortalState_New.eAfterEStop;
+					fbAxesEnable.M_EnableAxes();
+				END_IF
+			END_IF
+		END_IF
+		
+	E_PortalState_New.eAfterEStop:
+		fbGripper();
+		IF ipNcCtrl.P_ReadyForJob THEN
+			nCntActiveJobs := 0;
+			nCntRemoveStones := 0;
+			eSetJobState := E_SetJobState.eIdle;
+			HMI.bAllJobsSend := FALSE;
+			IF fbGripper.bGripperClosed AND fbGripper.bStoneInGripper THEN
+				stActJob.nJobID := 1;
+				stActJob.eJobType := E_JobType_RemoveStone;
+				stActJob.bBlack := bLastJobBlack;
+				ipNcCtrl.M_NewJob(aAxis[0].NcToPlc.ActPos, aAxis[1].NcToPlc.ActPos, GVL_CONST.STONE_POS_FIELD_Z);
+				ePortalState := E_PortalState_New.eTrspStone;
+	//TODO: auswählen Stein(e) zurücktransportieren??? Bleibt hier sonst stecken
+			ELSE
+				ipNcCtrl.M_NewJob(HMI.fPortalPosIdleX, HMI.fPortalPosIdleY, HMI.fPortalPosIdleZ); //Auftrag an Achsen geben: Grundposition anfahren
+				ePortalState := E_PortalState_New.eHome;
+			END_IF
+		END_IF
+END_CASE
+]]></ST>
+    </Implementation>
+    <Action Name="A_ClearJobBuffer" Id="{3aaaa407-45d5-435f-9470-9ca991bcc4a7}">
+      <Implementation>
+        <ST><![CDATA[MEMSET(ADR(aJobBuffer), 0, SIZEOF(aJobBuffer));
+MEMSET(ADR(stActJob), 0, SIZEOF(stActJob));
+nJobCount := 0;]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="A_CollsionAvoidance" Id="{c11f6b99-8591-41b6-b107-11d5d9be8a39}">
+      <Implementation>
+        <ST><![CDATA[IF aAxis[X].NcToPlc.SetPos < 0 AND aAxis[Z].NcToPlc.SetPos < MIN_MOVE_HEIGHT_Z THEN
+	fbAxesEnable.fOverride := HMI.fAxesOverrideMan;
+	fbAxesEnable.bEnableXY := FALSE;//erst beide disablen
+	fbAxesEnable.bEnableZn := FALSE;
+	FOR nMag := 0 TO MAGAZINE_NUMBER - 1 DO
+		fbAxesEnable.bEnableZn := fbAxesEnable.bEnableZn OR ABS(aAxis[Y].NcToPlc.SetPos - aMagYPositions[nMag]) < 0.5; //muss über einem der Stapel stehen (Y)
+	END_FOR
+	fbAxesEnable.bEnableZn := fbAxesEnable.bEnableZn AND ABS(aAxis[X].NcToPlc.SetPos - STACK_POS_X) < 0.5; //muss die X-Position der Stapel haben
+	fbAxesEnable.bEnableZn := fbAxesEnable.bEnableZn AND aAxis[Z].NcToPlc.SetPos > 2.4; //Z darf nicht den Boden der Magazine berühren
+	IF fbAxesEnable.bEnableZn = FALSE THEN
+		FOR nMag := 0 TO MAGAZINE_NUMBER - 1 DO
+			fbAxesEnable.bEnableZn := fbAxesEnable.bEnableZn OR ABS(aAxis[Y].NcToPlc.SetPos - aMagYScanPositions[nMag]) < 0.5; //muss über einem der Stapel stehen (Y)
+		END_FOR
+		fbAxesEnable.bEnableZn := fbAxesEnable.bEnableZn AND ABS(aAxis[X].NcToPlc.SetPos - STACK_SCAN_POS_X) < 0.5; //muss die X-Position der Stapel haben
+	END_IF
+	fbAxesEnable.bEnableZn := fbAxesEnable.bEnableZn AND NOT fbGripper.bPartSensor;
+ELSE
+	fbAxesEnable.fOverride := HMI.fAxesOverride;
+	IF aAxis[Z].NcToPlc.SetPos > STONE_POS_FIELD_Z + STONE_HEIGHT THEN
+		fbAxesEnable.bEnableXY := TRUE;
+	ELSE
+		fbAxesEnable.bEnableXY := FALSE;
+	END_IF
+	fbAxesEnable.bEnableZn := TRUE;
+END_IF]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="A_Cycle" Id="{fc8d1b1e-6698-48fa-b19e-ac2c5b727307}">
+      <Implementation>
+        <ST><![CDATA[fbAxesEnable(stX := aAxis[X], stY := aAxis[Y], stZ := aAxis[Z]);
+rTrigStamp(CLK := bStampZAxis);
+rTrigCheck(CLK := fbGripper.bPartSensor);
+
+bSafetyErrAck := FALSE;
+bQuitEStop := FALSE;
+
+(*SAFETY CHECK*)
+IF NOT bSafetyOK AND ePortalState <> E_PortalState_New.eEStop THEN
+	fbGripper(bEnable := FALSE, bClose := FALSE, bOpen := FALSE); //Stopp Greifer
+	IF ipNcCtrl <> 0 THEN
+		ipNcCtrl.P_Enable := FALSE; //Stopp Achsen
+	END_IF
+	bLastJobBlack := stActJob.bBlack;
+	ePortalState := E_PortalState_New.eEStop;
+END_IF
+
+IF ipNcCtrl <> 0 THEN
+	ipNcCtrl.M_AxisRef(rX := aAxis[X], rY := aAxis[Y], rZ := aAxis[Z]);
+	ipNcCtrl.P_bInductiveSensor := fbGripper.bPartSensor;
+	ipNcCtrl.M_Cyclic();
+END_IF
+
+(*CHECK FOR NEW JOB*)
+IF stNewJob.nJobID > 0 AND HMI.bSetJob AND stNewJob.nJobID <> stActJob.nJobID THEN
+	IF nJobCount < MAX_JOB_COUNT AND 
+		(stNewJob.fStartPosX > 0 AND stNewJob.fStartPosY > 0 OR stNewJob.eJobType = E_JobType_NewStone) AND //Start Pos must be on the display (if not newStone)
+		(stNewJob.fDestPosX > 0 AND stNewJob.fDestPosY > 0 OR stNewJob.eJobType = E_JobType_RemoveStone) //End Pos must be on the display (if not removeStone)
+	THEN
+		IF nJobCount > 0 THEN
+			FOR i := 0 TO nJobCount - 1 DO
+				IF stNewJob.nJobID = aJobBuffer[i].nJobID THEN
+					EXIT;
+				END_IF
+			END_FOR
+			IF i = nJobCount THEN
+				aJobBuffer[nJobCount] := stNewJob;
+				aJobBuffer[nJobCount].fStartPosX := aJobBuffer[nJobCount].fStartPosX + HMI.fScreenPosOffsetX;
+				aJobBuffer[nJobCount].fStartPosY := aJobBuffer[nJobCount].fStartPosY + HMI.fScreenPosOffsetY;
+				aJobBuffer[nJobCount].fDestPosX := aJobBuffer[nJobCount].fDestPosX + HMI.fScreenPosOffsetX;
+				aJobBuffer[nJobCount].fDestPosY := aJobBuffer[nJobCount].fDestPosY + HMI.fScreenPosOffsetY;
+				nJobCount := nJobCount + 1;
+			END_IF
+		ELSIF nJobCount = 0 THEN
+			aJobBuffer[nJobCount] := stNewJob;
+			aJobBuffer[nJobCount].fStartPosX := aJobBuffer[nJobCount].fStartPosX + HMI.fScreenPosOffsetX;
+			aJobBuffer[nJobCount].fStartPosY := aJobBuffer[nJobCount].fStartPosY + HMI.fScreenPosOffsetY;
+			aJobBuffer[nJobCount].fDestPosX := aJobBuffer[nJobCount].fDestPosX + HMI.fScreenPosOffsetX;
+			aJobBuffer[nJobCount].fDestPosY := aJobBuffer[nJobCount].fDestPosY + HMI.fScreenPosOffsetY;
+			nJobCount := nJobCount + 1;
+		END_IF
+		HMI.bSetJob := FALSE;
+	ELSE
+		;//MELDUNG: Kein Platz mehr im Job Buffer
+	END_IF
+END_IF
+
+fbRTrigSafety(CLK := bSafetyOK);
+IF fbRTrigSafety.Q THEN
+	FOR i := 0 TO MAGAZINE_NUMBER - 1 DO
+		aMagSkipCheck[i] := FALSE;
+	END_FOR
+	A_ClearJobBuffer();
+	IF ipNcCtrl <> 0 THEN
+		ipNcCtrl.P_Enable := TRUE;
+	END_IF
+	bQuit := TRUE;
+END_IF
+
+IF ipNcCtrl.P_Error AND ipNcCtrl.P_ErrID = E_ErrorIDs.eNotAllowedDriveDown THEN
+	ePortalState := E_PortalState_New.eError;
+END_IF
+
+(*RESET/ERROR ACK*)
+IF bQuit THEN
+	bQuit := FALSE;
+	fbAxesEnable.bReset := TRUE;
+	bValidateStonePos := FALSE;
+	IF fbError.bError THEN
+		A_ClearJobBuffer();
+		FOR i := 0 TO MAGAZINE_NUMBER - 1 DO
+			aMagSkipCheck[i] := FALSE;
+		END_FOR
+		IF ePortalState = E_PortalState_New.eError THEN
+			ePortalState := E_PortalState_New.eAfterEStop;
+			fbAxesEnable.M_EnableAxes();
+		END_IF
+	END_IF
+	fbError.M_Reset();
+	fbGripper.fbError.M_Reset();
+	
+	bSafetyErrAck := TRUE;
+	bQuitEStop := TRUE;
+	
+	FOR i := X TO Z DO
+		aAxis[i].ReadStatus();
+		IF aAxis[i].Status.Error THEN
+			fbResetAxis(Axis := aAxis[i], Execute := TRUE);
+			fbResetAxis(Axis := aAxis[i], Execute := FALSE);
+		END_IF
+	END_FOR
+	
+	IF ipNcCtrl <> 0 THEN
+		ipNcCtrl.P_Reset := TRUE;
+	END_IF
+END_IF
+
+(*SET BUSY*)
+bBusy := ePortalState <> E_PortalState_New.eIdle 
+	 AND ePortalState <> E_PortalState_New.eError
+	 AND ePortalState <> E_PortalState_New.eEStop;
+	 
+IF rTrigStamp.Q THEN
+	IF ipNcCtrl <> 0 THEN
+		IF ipNcCtrl.P_Busy THEN
+			ipNcCtrl.M_CancleJob();
+			ipNcCtrl.M_NewJob(HMI.fPortalPosIdleX, HMI.fPortalPosIdleY, HMI.fPortalPosIdleZ); //Auftrag an Achsen geben: Grundposition anfahren
+			ePortalState := E_PortalState_New.eStampTriggered;
+		ELSE
+			ePortalState := E_PortalState_New.eStampTriggered;
+		END_IF
+	END_IF
+END_IF]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="A_DequeueJob" Id="{23753d75-2743-4a21-8ea1-4e155a5d105d}">
+      <Implementation>
+        <ST><![CDATA[IF nJobCount > 0 THEN
+	IF nJobCount > 1 THEN
+		FOR k := 0 TO nJobCount - 2 DO
+			MEMCPY(ADR(aJobBuffer[k]), ADR(aJobBuffer[k + 1]), SIZEOF(aJobBuffer[k]));
+		END_FOR
+	END_IF
+	MEMSET(ADR(aJobBuffer[nJobCount - 1]), 0, SIZEOF(aJobBuffer[nJobCount - 1]));
+	nJobCount := nJobCount - 1;
+END_IF]]></ST>
+      </Implementation>
+    </Action>
+    <Action Name="A_Init" Id="{46aece40-4833-4cfc-a9cc-acace2fd4a2a}">
+      <Implementation>
+        <ST><![CDATA[(*SET INTERFACE*)
+ipNcCtrl := fbNciCtrl;
+
+//Fill Arrays	
+aMagCounter[0] := MAGAZINE_CAPACITY;
+aMagCounter[1] := MAGAZINE_CAPACITY;
+aMagCounter[2] := MAGAZINE_CAPACITY;
+aMagCounter[3] := MAGAZINE_CAPACITY;
+aMagCounter[4] := MAGAZINE_CAPACITY;
+aMagCounter[5] := MAGAZINE_CAPACITY;
+
+aMagYPositions[0] := STACK_1_POS_Y;
+aMagYPositions[1] := STACK_2_POS_Y;
+aMagYPositions[2] := STACK_3_POS_Y;
+aMagYPositions[3] := STACK_4_POS_Y;
+aMagYPositions[4] := STACK_5_POS_Y;
+aMagYPositions[5] := STACK_6_POS_Y;
+    
+aMagYScanPositions[0] := STACK_1_SCAN_POS_Y;
+aMagYScanPositions[1] := STACK_2_SCAN_POS_Y;
+aMagYScanPositions[2] := STACK_3_SCAN_POS_Y;
+aMagYScanPositions[3] := STACK_4_SCAN_POS_Y;
+aMagYScanPositions[4] := STACK_5_SCAN_POS_Y;
+aMagYScanPositions[5] := STACK_6_SCAN_POS_Y;
+
+]]></ST>
+      </Implementation>
+    </Action>
+    <Method Name="M_CheckStoneInMag_New" Id="{71713fb2-3d91-47aa-8ed9-c1fab8497a39}">
+      <Declaration><![CDATA[METHOD M_CheckStoneInMag_New : INT  //0: working; -2: Error; >0 Anzahl Steine in Magazin; -1: keine Steine in Magazin gefunden
+VAR_INPUT
+	nMagNumber		: INT;
+	nPosNumber		: INT;
+	
+
+END_VAR
+VAR
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[//Anzahl an Magazinen stimmt nicht überein
+IF MAGAZINE_NUMBER <> 6 THEN
+	fbError.M_Set(1,'Anzahl festgelegter Magazine falsch!', eCheckMagState, eID := E_ErrorIDs.eInvalidData, eSrc := E_ErrorSrcs.ePlc);
+	M_CheckStoneInMag_New := -2;
+	RETURN;
+END_IF
+
+//Übergebene Steinposition in Magazin ungültig
+IF nPosNumber < 1 OR nPosNumber > MAGAZINE_CAPACITY THEN
+	fbError.M_Set(1,'Übergebene Steinposition ungültig!', eCheckMagState, eID := E_ErrorIDs.eInvalidData, eSrc := E_ErrorSrcs.ePlc);
+	M_CheckStoneInMag_New := -2;
+	RETURN;
+END_IF
+
+//Übergebene Magazinnummer ungültig
+IF nMagNumber <  0 OR nMagNumber >= MAGAZINE_NUMBER THEN
+	fbError.M_Set(1,'Übergebene Magazin-Nummer ungültig!', eCheckMagState, eID := E_ErrorIDs.eInvalidData, eSrc := E_ErrorSrcs.ePlc);
+	M_CheckStoneInMag_New := -2;
+	RETURN;
+END_IF
+
+//Gefordertes Magazin muss nicht überprüft werden
+IF aMagSkipCheck[nMagNumber] THEN
+	IF aMagCounter[nMagNumber] = 0 THEN
+		M_CheckStoneInMag_New := -3;
+	ELSE
+		M_CheckStoneInMag_New := aMagCounter[nMagNumber];
+	END_IF
+	RETURN;
+END_IF
+
+//Steinanzahl im Magazin zu hoch 
+IF 
+	fbGripper.bPartSensor 
+	AND aAxis[Z].NcToPlc.SetPos > STONE_HEIGHT * (MAGAZINE_CAPACITY - 1) + STACK_SCAN_POS_Z_BASE + STONE_HEIGHT*0.8
+	AND aAxis[Z].NcToPlc.SetVelo < 0 //abwärtsbewegung
+THEN
+	fbError.M_Set(1,'Zu viele Steine in Magazin!', ePortalState, eID := E_ErrorIDs.eInvalidData, eSrc := E_ErrorSrcs.ePortal);
+	ipNcCtrl.M_CancleJob();
+	M_CheckStoneInMag_New := -2;
+END_IF
+
+
+//Suche nach Anzahl Steine im Magazin
+CASE eCheckMagState OF 
+	E_CheckMagazines_New.eIdle:
+		nStonesInMagazin := 4;
+		eCheckMagState := E_CheckMagazines_New.eStartNewNCI;
+	
+	E_CheckMagazines_New.eStartNewNCI:
+		ipNcCtrl.M_NewJob(STACK_SCAN_POS_X, aMagYScanPositions[nMagNumber], STACK_POS_Z_BASE + ((nStonesInMagazin-1) * STONE_HEIGHT ));	
+		eCheckMagState := E_CheckMagazines_New.eDebug;
+		
+	E_CheckMagazines_New.eDebug: 
+		IF ipNcCtrl.P_Busy THEN
+			eCheckMagState := E_CheckMagazines_New.eWaitForPortal;
+		END_IF
+		
+	E_CheckMagazines_New.eWaitForPortal:
+		IF rTrigCheck.Q THEN						//Stein gefunden
+			aMagCounter[nMagNumber] := nStonesInMagazin;
+			M_CheckStoneInMag_New := nStonesInMagazin;
+		ELSIF NOT ipNcCtrl.P_Busy AND NOT fbGripper.bPartSensor THEN					
+			IF nStonesInMagazin > 1 THEN					//an aktueller Position kein Stein gefunden
+				nStonesInMagazin := nStonesInMagazin -1;
+				eCheckMagState:= E_CheckMagazines_New.eStartNewNCI;
+			ELSE											//gar kein Stein im Magazin gefunden
+				aMagCounter[nMagNumber] := 0;
+				M_CheckStoneInMag_New := -1;
+			END_IF
+		END_IF
+END_CASE
+
+IF M_CheckStoneInMag_New <> 0 THEN
+	aMagSkipCheck[nMagNumber] := TRUE;
+	eCheckMagState := E_CheckMagazines_New.eIdle;
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_IsHomed" Id="{02510008-ce5d-4f33-ad8f-a1a97d1ea3c0}">
+      <Declaration><![CDATA[METHOD M_IsHomed : BOOL
+VAR_INPUT
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[M_IsHomed := ABS(aAxis[X].NcToPlc.SetPos - HMI.fPortalPosIdleX) < 2
+		AND ABS(aAxis[Y].NcToPlc.SetPos - HMI.fPortalPosIdleY) < 2
+		AND ABS(aAxis[Z].NcToPlc.SetPos - HMI.fPortalPosIdleZ) < 2;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_SelEmptyPos_New" Id="{b9c507bf-5fcb-4a6c-b88a-0a3383bdd494}">
+      <Declaration><![CDATA[METHOD M_SelEmptyPos_New : BOOL
+VAR_INPUT
+END_VAR
+VAR
+	bFirstJobBlack : BOOL;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF aJobBuffer[0].nJobID <> 0 AND aJobBuffer[0].bBlack THEN		//First Job Black or white
+	bFirstJobBlack := TRUE;
+ELSIF 
+	aJobBuffer[0].nJobID <> 0 AND NOT aJobBuffer[0].bBlack THEN
+	bFirstJobBlack := FALSE;
+END_IF
+
+FOR i := 0 TO (MIN(4,nJobCount) - 1) BY 1 DO		//Suche Anzahl an zum 1. Job gleichfarbigen Job bis max. 4 Jobs
+	IF aJobBuffer[i].nJobID <> 0 AND aJobBuffer[i].bBlack = bFirstJobBlack AND aJobBuffer[i].eJobType = E_JobType.E_JobType_RemoveStone THEN
+		nCntActiveJobs := nCntActiveJobs + 1;
+	ELSE
+		EXIT;
+	END_IF
+END_FOR
+
+WHILE(nCntActiveJobs > 0) DO
+	FOR i := SEL(bFirstJobBlack, MAGAZINE_NUMBER/2, 0) TO SEL (bFirstJobBlack, MAGAZINE_NUMBER-1, MAGAZINE_NUMBER/2-1) BY 1 DO //SEL: Entscheide ob schwarze oder weiße Magazine
+		IF MAGAZINE_CAPACITY - aMagCounter[i] >= nCntActiveJobs THEN	//genügend freie Plätze in Magazin vorhanden?
+			nSelectedMag := i;
+			nPosInMag := aMagCounter[i] + 1;	//abzulegende unterste Steinposition (1 ganz unten, 4 ganz oben)
+			fStonePosZFromMag := STACK_POS_Z_BASE + STONE_HEIGHT * (nPosInMag - 1);
+			nCntRemoveStones := nCntActiveJobs;
+			M_SelEmptyPos_New := TRUE;
+			EXIT;
+		END_IF
+	END_FOR
+	
+	IF M_SelEmptyPos_New THEN
+		EXIT;
+	END_IF
+	IF NOT M_SelEmptyPos_New AND nCntActiveJobs >= 1 THEN
+		i := SEL(bFirstJobBlack, MAGAZINE_NUMBER/2, 0);
+		nCntActiveJobs := nCntActiveJobs - 1;
+	ELSIF NOT M_SelEmptyPos_New AND nCntActiveJobs = 0 THEN
+		M_SelEmptyPos_New := FALSE;
+		EXIT;
+	END_IF
+END_WHILE
+]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_SelNewStone_New" Id="{441b417a-b09c-4911-a1e2-0d4af26651d8}">
+      <Declaration><![CDATA[METHOD M_SelNewStone_New : BOOL
+VAR_INPUT
+END_VAR
+VAR
+	i		: INT;
+	j 		: INT;
+	bFirstJobBlack	: BOOL;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF aJobBuffer[0].nJobID <> 0 AND aJobBuffer[0].bBlack THEN		//First Job Black or white
+	bFirstJobBlack := TRUE;
+ELSIF 
+	aJobBuffer[0].nJobID <> 0 AND NOT aJobBuffer[0].bBlack THEN
+	bFirstJobBlack := FALSE;
+END_IF
+
+FOR i := 0 TO (MIN(4,nJobCount) - 1) BY 1 DO		//Suche Anzahl an zum 1. Job gleichfarbigen Job bis max. 4 Jobs
+	IF aJobBuffer[i].nJobID <> 0 AND aJobBuffer[i].bBlack = bFirstJobBlack AND aJobBuffer[i].eJobType = E_JobType.E_JobType_NewStone THEN
+		nCntActiveJobs := nCntActiveJobs + 1;
+	ELSE
+		EXIT;
+	END_IF
+END_FOR
+
+WHILE(nCntActiveJobs > 0) DO
+	FOR i := SEL(bFirstJobBlack, MAGAZINE_NUMBER/2, 0) TO SEL (bFirstJobBlack, MAGAZINE_NUMBER-1, MAGAZINE_NUMBER/2-1) BY 1 DO //SEL: Entscheide ob schwarze oder weiße Magazine
+		IF aMagCounter[i] >= nCntActiveJobs THEN	//genügend Steine in einem Magazin vorhanden
+			nSelectedMag := i;
+			nPosInMag := aMagCounter[i] - nCntActiveJobs + 1;	//zu greifenden Stein (1 ganz unten, 4 ganz oben)
+			aJobBuffer[0].fStartPosX := STACK_POS_X;
+			aJobBuffer[0].fStartPosY := aMagYPositions[nSelectedMag];
+			fStonePosZFromMag := STACK_POS_Z_BASE + STONE_HEIGHT * (nPosInMag - 1);
+			M_SelNewStone_New := TRUE;
+			EXIT;
+		END_IF
+	END_FOR
+	IF M_SelNewStone_New THEN
+		EXIT;
+	END_IF
+	IF NOT M_SelNewStone_New AND nCntActiveJobs >= 1 THEN
+		i := SEL(bFirstJobBlack, MAGAZINE_NUMBER/2, 0);
+		nCntActiveJobs := nCntActiveJobs - 1;
+	ELSIF NOT M_SelNewStone_New AND nCntActiveJobs = 0 THEN
+		//Gar keine Steine gefunden --> TODO: Was jetzt machen???
+		M_SelNewStone_New := FALSE;
+		EXIT;
+	END_IF
+END_WHILE
+
+
+
+
+
+]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_SetJob_New" Id="{d6338665-33b7-4f61-acdd-711e479e637f}">
+      <Declaration><![CDATA[METHOD M_SetJob_New : INT
+VAR_INPUT
+END_VAR
+VAR
+	bTest	: BOOL;
+END_VAR
+
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[CASE eSetJobState OF 	//TODO: wenn erste mal Fehler bei M_Sel, dann alle aMagSkipCHeck zurücksetzen und neu suchen
+	E_SetJobState.eIdle: 
+		IF nJobCount > 0 AND aJobBuffer[0].eJobType = E_JobType_MoveStone AND aJobBuffer[0].nJobID <> 0 THEN
+			nCntActiveJobs := -1;
+			M_SetJob_New := 1;
+		ELSIF nJobCount > 0 AND aJobBuffer[0].eJobType = E_JobType_NewStone AND aJobBuffer[0].nJobID <> 0 THEN
+			eSetJobState := E_SetJobState.eSelNewStone;
+			nCntActiveJobs := 0;
+		ELSIF nJobCount > 0 AND aJobBuffer[0].eJobType = E_JobType.E_JobType_RemoveStone AND aJobBuffer[0].nJobID <> 0 THEN
+			//IF NOT bCheckedAllMag THEN
+			//	FOR i := 0 TO MAGAZINE_NUMBER -1 BY 1 DO
+			//		aMagSkipCheck[i] := FALSE;
+			//	END_FOR
+			//	eSetJobState := E_SetJobState.eCheckAllMagazines;
+			//ELSE
+			//	eSetJobState := E_SetJobState.eSelRemoveStone;
+			//END_IF
+			eSetJobState := E_SetJobState.eSelRemoveStone;
+			
+			nCntActiveJobs := 0;
+		ELSIF aJobBuffer[0].nJobID = 0 THEN
+			fbError.M_Set(1,'In M_SetJob Auftrag erwartet, aber nicht gefunden!', ePortalState, eID := E_ErrorIDs.eNoJobsFound, eSrc := E_ErrorSrcs.ePortal);
+			M_SetJob_New := -1;
+		END_IF
+		
+		nValidationValue := 0;
+		nNumChecked := 0;
+		
+	E_SetJobState.eSelNewStone:
+		IF M_SelNewStone_New() THEN
+			eSetJobState := E_SetJobState.eValidateNewStone;
+		ELSE
+			IF bCheckedAllMag THEN
+				M_SetJob_New := -1;																	
+				fbError.M_Set(1,'Neuer Stein aufnehmen: Keine Steine im Steinlager gefunden!', ePortalState, eID := E_ErrorIDs.eNoStonesFound, eSrc := E_ErrorSrcs.ePortal);
+				eSetJobState := E_SetJobState.eIdle;
+			ELSE
+				FOR i := 0 TO MAGAZINE_NUMBER -1 BY 1 DO
+					aMagSkipCheck[i] := FALSE;
+				END_FOR
+				eSetJobState := E_SetJobState.eCheckAllMagazines;
+			END_IF
+		END_IF
+		
+	E_SetJobState.eValidateNewStone:
+		nValidationValue := M_CheckStoneInMag_New(nMagNumber := nSelectedMag, nPosNumber := nPosInMag);
+		IF nValidationValue = -2 THEN																	//direkter Fehler
+			eSetJobState := E_SetJobState.eIdle;
+			M_SetJob_New := -1;
+		ELSIF nValidationValue > 0 AND nValidationValue-nCntActiveJobs+1 = nPosInMag THEN				//Gefundenes Magazin korrekt
+			eSetJobState := E_SetJobState.eIdle;
+			M_SetJob_New := 1;
+		ELSIF nValidationValue = -1 OR (nValidationValue > 0 AND nValidationValue <> nPosInMag) OR nValidationValue = -3 THEN 
+			//TODO TESTEN: ?? kein Stein in Magazin gefunden oder Anzahl stimmen nicht überein??
+			//--> Problem Endlos-Schleife?
+			IF bCheckedAllMag THEN 
+				M_SetJob_New := -1;
+				fbError.M_Set(1,'Beim Aufbauen kein Stein in Magazin gefunden!', ePortalState, eID := E_ErrorIDs.eNoStonesFound, eSrc := E_ErrorSrcs.ePortal);
+				eSetJobState := E_SetJobState.eIdle;
+			ELSE
+				FOR i := 0 TO MAGAZINE_NUMBER -1 BY 1 DO
+					aMagSkipCheck[i] := FALSE;
+				END_FOR
+				eSetJobState := E_SetJobState.eCheckAllMagazines;
+			END_IF
+		END_IF
+		
+		IF nValidationValue <> 0 AND eSetJobState <> E_SetJobState.eCheckAllMagazines THEN
+			eSetJobState := E_SetJobState.eIdle;
+		END_IF
+		
+	E_SetJobState.eSelRemoveStone:
+		IF M_SelEmptyPos_New() THEN
+			eSetJobState := E_SetJobState.eValidateRemoveStone;
+		ELSE
+			IF bCheckedAllMag THEN 
+				M_SetJob_New := -1;
+				fbError.M_Set(1,'Beim Abräumen keine freien Steinlager gefunden!', ePortalState, eID := E_ErrorIDs.eClearFieldNoCapacityFound, eSrc := E_ErrorSrcs.ePortal);
+				eSetJobState := E_SetJobState.eIdle;
+			ELSE
+				FOR i := 0 TO MAGAZINE_NUMBER -1 BY 1 DO
+					aMagSkipCheck[i] := FALSE;
+				END_FOR
+				eSetJobState := E_SetJobState.eCheckAllMagazines;
+			END_IF
+		END_IF
+		
+	E_SetJobState.eValidateRemoveStone:
+		nValidationValue := M_CheckStoneInMag_New(nMagNumber := nSelectedMag, nPosNumber := nPosInMag);
+		IF nValidationValue = -2 THEN	
+			M_SetJob_New := -1;
+		ELSIF nValidationValue > 0 AND nValidationValue + 1 = nPosInMag THEN	//Gefundenes Magazin korrekt mit bis zu drei Steinen Platz
+			M_SetJob_New := 1;
+		ELSIF nValidationValue = -3 AND nValidationValue + 4 = nPosInMag THEN	//Überprüfung geskippt,  mit 4 Steinen Platz
+			M_SetJob_New := 1;
+		ELSIF nValidationValue = -1 THEN										//Gefundenes Magazin korrekt mit 4 Steinen Platz
+			nPosInMag := 1;
+			fStonePosZFromMag := STACK_POS_Z_BASE;
+			M_SetJob_New := 1;
+		ELSIF nValidationValue = 0 THEN
+			bTest := TRUE;
+		ELSE //TESTEN: Anzahl stimmen nicht überein--> TODO: jetzt M_SelNewStone_New() neu durchlaufen lassen, nMag[] ist schon in Methode auf 0 gesetzt
+			IF bCheckedAllMag THEN
+				M_SetJob_New := -1;
+				fbError.M_Set(1,'Beim Abräumen keine freien Steinlager gefunden!', ePortalState, eID := E_ErrorIDs.eClearFieldNoCapacityFound, eSrc := E_ErrorSrcs.ePortal);
+				eSetJobState := E_SetJobState.eIdle;
+			ELSE
+				eSetJobState := E_SetJobState.eSelRemoveStone;
+			END_IF
+		END_IF
+		
+		IF nValidationValue <> 0 AND eSetJobState <> E_SetJobState.eSelRemoveStone THEN
+			eSetJobState := E_SetJobState.eIdle;
+		END_IF
+		
+	E_SetJobState.eCheckAllMagazines:
+		IF aMagSkipCheck[nNumChecked] THEN
+			nNumChecked := nNumChecked + 1;
+		ELSE
+			nValidationValue := M_CheckStoneInMag_New(nMagNumber := nNumChecked, nPosNumber := 1);
+		END_IF
+		IF nValidationValue >= 1 OR nValidationValue = -1 OR nValidationValue = -3 THEN
+			IF nNumChecked = MAGAZINE_NUMBER-1 THEN
+				bCheckedAllMag := TRUE;
+				nNumChecked := 0;
+				IF nJobCount > 0 AND aJobBuffer[0].eJobType = E_JobType.E_JobType_RemoveStone AND aJobBuffer[0].nJobID <> 0 THEN
+					eSetJobState := E_SetJobState.eSelRemoveStone;
+				ELSIF nJobCount > 0 AND aJobBuffer[0].eJobType = E_JobType_NewStone AND aJobBuffer[0].nJobID <> 0 THEN
+					eSetJobState := E_SetJobState.eSelNewStone;
+				END_IF
+			ELSE
+				nValidationValue := 0;
+				nNumChecked := nNumChecked + 1;
+			END_IF
+		END_IF
+	
+	E_SetJobState.eAxesNotReady:
+		IF fbAxesEnable.bAllAxesReady THEN
+			eSetJobState := E_SetJobState.eIdle;
+		END_IF
+END_CASE
+
+IF NOT fbAxesEnable.bAllAxesReady THEN
+	eSetJobState := E_SetJobState.eAxesNotReady;
+END_IF
+]]></ST>
+      </Implementation>
+    </Method>
+    <LineIds Name="FB_Portal">
+      <LineId Id="4611" Count="5" />
+      <LineId Id="6279" Count="0" />
+      <LineId Id="4617" Count="4" />
+      <LineId Id="5623" Count="1" />
+      <LineId Id="5626" Count="1" />
+      <LineId Id="5698" Count="0" />
+      <LineId Id="5700" Count="0" />
+      <LineId Id="5953" Count="0" />
+      <LineId Id="7244" Count="2" />
+      <LineId Id="7336" Count="0" />
+      <LineId Id="6297" Count="0" />
+      <LineId Id="5957" Count="0" />
+      <LineId Id="5703" Count="0" />
+      <LineId Id="5707" Count="0" />
+      <LineId Id="5704" Count="0" />
+      <LineId Id="5702" Count="0" />
+      <LineId Id="5699" Count="0" />
+      <LineId Id="5629" Count="0" />
+      <LineId Id="5631" Count="1" />
+      <LineId Id="5630" Count="0" />
+      <LineId Id="5628" Count="0" />
+      <LineId Id="5625" Count="0" />
+      <LineId Id="4622" Count="0" />
+      <LineId Id="5708" Count="0" />
+      <LineId Id="5710" Count="0" />
+      <LineId Id="6125" Count="1" />
+      <LineId Id="6128" Count="0" />
+      <LineId Id="6127" Count="0" />
+      <LineId Id="5711" Count="0" />
+      <LineId Id="5848" Count="0" />
+      <LineId Id="6564" Count="2" />
+      <LineId Id="6563" Count="0" />
+      <LineId Id="6050" Count="0" />
+      <LineId Id="6737" Count="0" />
+      <LineId Id="5849" Count="0" />
+      <LineId Id="6387" Count="1" />
+      <LineId Id="6386" Count="0" />
+      <LineId Id="6382" Count="0" />
+      <LineId Id="6478" Count="0" />
+      <LineId Id="5850" Count="0" />
+      <LineId Id="5842" Count="0" />
+      <LineId Id="5876" Count="0" />
+      <LineId Id="5843" Count="0" />
+      <LineId Id="5845" Count="0" />
+      <LineId Id="5847" Count="0" />
+      <LineId Id="5836" Count="0" />
+      <LineId Id="5715" Count="1" />
+      <LineId Id="5714" Count="0" />
+      <LineId Id="5712" Count="0" />
+      <LineId Id="6129" Count="0" />
+      <LineId Id="5713" Count="0" />
+      <LineId Id="5718" Count="1" />
+      <LineId Id="7128" Count="0" />
+      <LineId Id="6202" Count="0" />
+      <LineId Id="6036" Count="0" />
+      <LineId Id="5760" Count="1" />
+      <LineId Id="5763" Count="1" />
+      <LineId Id="6467" Count="0" />
+      <LineId Id="6466" Count="0" />
+      <LineId Id="6468" Count="0" />
+      <LineId Id="6472" Count="1" />
+      <LineId Id="5765" Count="0" />
+      <LineId Id="5758" Count="0" />
+      <LineId Id="6035" Count="0" />
+      <LineId Id="6033" Count="1" />
+      <LineId Id="6037" Count="0" />
+      <LineId Id="6045" Count="0" />
+      <LineId Id="6567" Count="0" />
+      <LineId Id="6569" Count="1" />
+      <LineId Id="6568" Count="0" />
+      <LineId Id="6571" Count="0" />
+      <LineId Id="6044" Count="0" />
+      <LineId Id="6046" Count="0" />
+      <LineId Id="5738" Count="0" />
+      <LineId Id="6204" Count="0" />
+      <LineId Id="5958" Count="0" />
+      <LineId Id="5740" Count="1" />
+      <LineId Id="5743" Count="1" />
+      <LineId Id="6026" Count="0" />
+      <LineId Id="5773" Count="0" />
+      <LineId Id="5783" Count="0" />
+      <LineId Id="6283" Count="0" />
+      <LineId Id="6285" Count="0" />
+      <LineId Id="6474" Count="0" />
+      <LineId Id="6469" Count="0" />
+      <LineId Id="6292" Count="0" />
+      <LineId Id="6028" Count="4" />
+      <LineId Id="6561" Count="1" />
+      <LineId Id="6560" Count="0" />
+      <LineId Id="6027" Count="0" />
+      <LineId Id="5774" Count="0" />
+      <LineId Id="5780" Count="0" />
+      <LineId Id="5782" Count="0" />
+      <LineId Id="5781" Count="0" />
+      <LineId Id="5778" Count="0" />
+      <LineId Id="5877" Count="0" />
+      <LineId Id="5779" Count="0" />
+      <LineId Id="5745" Count="0" />
+      <LineId Id="5739" Count="0" />
+      <LineId Id="5737" Count="0" />
+      <LineId Id="5785" Count="0" />
+      <LineId Id="6378" Count="0" />
+      <LineId Id="6470" Count="0" />
+      <LineId Id="6475" Count="0" />
+      <LineId Id="6477" Count="0" />
+      <LineId Id="6476" Count="0" />
+      <LineId Id="6291" Count="0" />
+      <LineId Id="5786" Count="0" />
+      <LineId Id="5790" Count="4" />
+      <LineId Id="5798" Count="0" />
+      <LineId Id="5796" Count="1" />
+      <LineId Id="5789" Count="0" />
+      <LineId Id="5799" Count="1" />
+      <LineId Id="5802" Count="6" />
+      <LineId Id="6844" Count="0" />
+      <LineId Id="6043" Count="0" />
+      <LineId Id="6847" Count="0" />
+      <LineId Id="6849" Count="0" />
+      <LineId Id="6845" Count="0" />
+      <LineId Id="6038" Count="1" />
+      <LineId Id="6041" Count="1" />
+      <LineId Id="6651" Count="0" />
+      <LineId Id="6653" Count="1" />
+      <LineId Id="6652" Count="0" />
+      <LineId Id="5809" Count="0" />
+      <LineId Id="5833" Count="1" />
+      <LineId Id="5811" Count="1" />
+      <LineId Id="5821" Count="0" />
+      <LineId Id="5814" Count="1" />
+      <LineId Id="7236" Count="0" />
+      <LineId Id="7238" Count="2" />
+      <LineId Id="7237" Count="0" />
+      <LineId Id="5816" Count="4" />
+      <LineId Id="5801" Count="0" />
+      <LineId Id="5729" Count="0" />
+      <LineId Id="5822" Count="0" />
+      <LineId Id="5824" Count="4" />
+      <LineId Id="5830" Count="1" />
+      <LineId Id="5823" Count="0" />
+      <LineId Id="5856" Count="3" />
+      <LineId Id="6822" Count="1" />
+      <LineId Id="6826" Count="3" />
+      <LineId Id="7129" Count="0" />
+      <LineId Id="6832" Count="0" />
+      <LineId Id="7224" Count="0" />
+      <LineId Id="7226" Count="0" />
+      <LineId Id="7230" Count="5" />
+      <LineId Id="7225" Count="0" />
+      <LineId Id="6824" Count="0" />
+      <LineId Id="7228" Count="1" />
+      <LineId Id="6825" Count="0" />
+      <LineId Id="5864" Count="9" />
+      <LineId Id="5861" Count="0" />
+      <LineId Id="5940" Count="0" />
+      <LineId Id="5942" Count="10" />
+      <LineId Id="5941" Count="0" />
+      <LineId Id="5874" Count="0" />
+      <LineId Id="5878" Count="0" />
+      <LineId Id="5880" Count="0" />
+      <LineId Id="7432" Count="0" />
+      <LineId Id="5881" Count="6" />
+      <LineId Id="7524" Count="0" />
+      <LineId Id="7434" Count="1" />
+      <LineId Id="5888" Count="2" />
+      <LineId Id="7038" Count="1" />
+      <LineId Id="7037" Count="0" />
+      <LineId Id="5891" Count="4" />
+      <LineId Id="5879" Count="0" />
+      <LineId Id="5896" Count="2" />
+      <LineId Id="5962" Count="0" />
+      <LineId Id="5994" Count="0" />
+      <LineId Id="6054" Count="0" />
+      <LineId Id="7247" Count="0" />
+      <LineId Id="7036" Count="0" />
+      <LineId Id="5931" Count="3" />
+      <LineId Id="7431" Count="0" />
+      <LineId Id="5935" Count="0" />
+      <LineId Id="7433" Count="0" />
+      <LineId Id="5936" Count="3" />
+      <LineId Id="5901" Count="0" />
+      <LineId Id="4819" Count="0" />
+      <LineId Id="1083" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_Portal.A_ClearJobBuffer">
+      <LineId Id="1" Count="0" />
+      <LineId Id="6" Count="0" />
+      <LineId Id="10" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_Portal.A_CollsionAvoidance">
+      <LineId Id="39" Count="1" />
+      <LineId Id="7" Count="0" />
+      <LineId Id="18" Count="0" />
+      <LineId Id="13" Count="0" />
+      <LineId Id="25" Count="0" />
+      <LineId Id="14" Count="0" />
+      <LineId Id="19" Count="1" />
+      <LineId Id="27" Count="0" />
+      <LineId Id="30" Count="0" />
+      <LineId Id="32" Count="1" />
+      <LineId Id="28" Count="0" />
+      <LineId Id="34" Count="0" />
+      <LineId Id="36" Count="0" />
+      <LineId Id="23" Count="0" />
+      <LineId Id="41" Count="1" />
+      <LineId Id="24" Count="0" />
+      <LineId Id="43" Count="1" />
+      <LineId Id="46" Count="0" />
+      <LineId Id="21" Count="0" />
+      <LineId Id="3" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_Portal.A_Cycle">
+      <LineId Id="513" Count="0" />
+      <LineId Id="625" Count="0" />
+      <LineId Id="628" Count="0" />
+      <LineId Id="548" Count="0" />
+      <LineId Id="514" Count="0" />
+      <LineId Id="404" Count="0" />
+      <LineId Id="522" Count="6" />
+      <LineId Id="546" Count="0" />
+      <LineId Id="529" Count="0" />
+      <LineId Id="521" Count="0" />
+      <LineId Id="385" Count="1" />
+      <LineId Id="391" Count="0" />
+      <LineId Id="631" Count="0" />
+      <LineId Id="534" Count="0" />
+      <LineId Id="389" Count="0" />
+      <LineId Id="406" Count="0" />
+      <LineId Id="309" Count="0" />
+      <LineId Id="311" Count="0" />
+      <LineId Id="428" Count="0" />
+      <LineId Id="462" Count="1" />
+      <LineId Id="460" Count="0" />
+      <LineId Id="318" Count="1" />
+      <LineId Id="330" Count="0" />
+      <LineId Id="434" Count="0" />
+      <LineId Id="323" Count="0" />
+      <LineId Id="435" Count="0" />
+      <LineId Id="437" Count="0" />
+      <LineId Id="611" Count="3" />
+      <LineId Id="436" Count="0" />
+      <LineId Id="321" Count="0" />
+      <LineId Id="438" Count="0" />
+      <LineId Id="312" Count="0" />
+      <LineId Id="605" Count="2" />
+      <LineId Id="609" Count="1" />
+      <LineId Id="331" Count="0" />
+      <LineId Id="429" Count="0" />
+      <LineId Id="539" Count="0" />
+      <LineId Id="431" Count="1" />
+      <LineId Id="430" Count="0" />
+      <LineId Id="308" Count="0" />
+      <LineId Id="508" Count="2" />
+      <LineId Id="530" Count="1" />
+      <LineId Id="511" Count="0" />
+      <LineId Id="517" Count="0" />
+      <LineId Id="519" Count="0" />
+      <LineId Id="518" Count="0" />
+      <LineId Id="516" Count="0" />
+      <LineId Id="512" Count="0" />
+      <LineId Id="507" Count="0" />
+      <LineId Id="633" Count="0" />
+      <LineId Id="632" Count="0" />
+      <LineId Id="634" Count="1" />
+      <LineId Id="333" Count="2" />
+      <LineId Id="535" Count="1" />
+      <LineId Id="600" Count="0" />
+      <LineId Id="540" Count="0" />
+      <LineId Id="597" Count="2" />
+      <LineId Id="588" Count="3" />
+      <LineId Id="543" Count="0" />
+      <LineId Id="541" Count="0" />
+      <LineId Id="581" Count="0" />
+      <LineId Id="537" Count="0" />
+      <LineId Id="441" Count="0" />
+      <LineId Id="443" Count="0" />
+      <LineId Id="446" Count="0" />
+      <LineId Id="559" Count="6" />
+      <LineId Id="495" Count="0" />
+      <LineId Id="501" Count="0" />
+      <LineId Id="503" Count="0" />
+      <LineId Id="596" Count="0" />
+      <LineId Id="442" Count="0" />
+      <LineId Id="573" Count="0" />
+      <LineId Id="425" Count="0" />
+      <LineId Id="342" Count="1" />
+      <LineId Id="393" Count="1" />
+      <LineId Id="615" Count="0" />
+      <LineId Id="618" Count="1" />
+      <LineId Id="621" Count="0" />
+      <LineId Id="623" Count="0" />
+      <LineId Id="626" Count="0" />
+      <LineId Id="624" Count="0" />
+      <LineId Id="629" Count="1" />
+      <LineId Id="627" Count="0" />
+      <LineId Id="622" Count="0" />
+      <LineId Id="620" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_Portal.A_DequeueJob">
+      <LineId Id="23" Count="7" />
+      <LineId Id="15" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_Portal.A_Init">
+      <LineId Id="115" Count="0" />
+      <LineId Id="121" Count="1" />
+      <LineId Id="88" Count="0" />
+      <LineId Id="124" Count="5" />
+      <LineId Id="123" Count="0" />
+      <LineId Id="90" Count="4" />
+      <LineId Id="97" Count="0" />
+      <LineId Id="106" Count="6" />
+      <LineId Id="114" Count="0" />
+      <LineId Id="31" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_Portal.M_CheckStoneInMag_New">
+      <LineId Id="97" Count="0" />
+      <LineId Id="74" Count="0" />
+      <LineId Id="77" Count="0" />
+      <LineId Id="106" Count="0" />
+      <LineId Id="79" Count="0" />
+      <LineId Id="78" Count="0" />
+      <LineId Id="96" Count="0" />
+      <LineId Id="81" Count="0" />
+      <LineId Id="80" Count="0" />
+      <LineId Id="82" Count="0" />
+      <LineId Id="107" Count="0" />
+      <LineId Id="84" Count="0" />
+      <LineId Id="83" Count="0" />
+      <LineId Id="95" Count="0" />
+      <LineId Id="85" Count="0" />
+      <LineId Id="71" Count="0" />
+      <LineId Id="86" Count="0" />
+      <LineId Id="108" Count="0" />
+      <LineId Id="88" Count="0" />
+      <LineId Id="87" Count="0" />
+      <LineId Id="94" Count="0" />
+      <LineId Id="89" Count="1" />
+      <LineId Id="198" Count="1" />
+      <LineId Id="201" Count="1" />
+      <LineId Id="200" Count="0" />
+      <LineId Id="93" Count="0" />
+      <LineId Id="92" Count="0" />
+      <LineId Id="109" Count="0" />
+      <LineId Id="98" Count="1" />
+      <LineId Id="102" Count="0" />
+      <LineId Id="100" Count="0" />
+      <LineId Id="103" Count="2" />
+      <LineId Id="128" Count="1" />
+      <LineId Id="101" Count="0" />
+      <LineId Id="172" Count="1" />
+      <LineId Id="110" Count="0" />
+      <LineId Id="73" Count="0" />
+      <LineId Id="130" Count="0" />
+      <LineId Id="139" Count="0" />
+      <LineId Id="143" Count="0" />
+      <LineId Id="140" Count="2" />
+      <LineId Id="185" Count="0" />
+      <LineId Id="132" Count="0" />
+      <LineId Id="188" Count="4" />
+      <LineId Id="133" Count="1" />
+      <LineId Id="156" Count="0" />
+      <LineId Id="147" Count="0" />
+      <LineId Id="149" Count="0" />
+      <LineId Id="151" Count="1" />
+      <LineId Id="166" Count="0" />
+      <LineId Id="154" Count="0" />
+      <LineId Id="157" Count="0" />
+      <LineId Id="155" Count="0" />
+      <LineId Id="153" Count="0" />
+      <LineId Id="146" Count="0" />
+      <LineId Id="127" Count="0" />
+      <LineId Id="168" Count="3" />
+      <LineId Id="167" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_Portal.M_IsHomed">
+      <LineId Id="5" Count="0" />
+      <LineId Id="7" Count="1" />
+    </LineIds>
+    <LineIds Name="FB_Portal.M_SelEmptyPos_New">
+      <LineId Id="6" Count="9" />
+      <LineId Id="71" Count="1" />
+      <LineId Id="16" Count="1" />
+      <LineId Id="53" Count="0" />
+      <LineId Id="18" Count="4" />
+      <LineId Id="25" Count="0" />
+      <LineId Id="39" Count="0" />
+      <LineId Id="26" Count="2" />
+      <LineId Id="5" Count="0" />
+      <LineId Id="54" Count="0" />
+      <LineId Id="63" Count="1" />
+      <LineId Id="62" Count="0" />
+      <LineId Id="56" Count="3" />
+      <LineId Id="61" Count="0" />
+      <LineId Id="78" Count="0" />
+      <LineId Id="55" Count="0" />
+      <LineId Id="46" Count="0" />
+      <LineId Id="45" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_Portal.M_SelNewStone_New">
+      <LineId Id="36" Count="0" />
+      <LineId Id="39" Count="0" />
+      <LineId Id="41" Count="2" />
+      <LineId Id="40" Count="0" />
+      <LineId Id="38" Count="0" />
+      <LineId Id="25" Count="0" />
+      <LineId Id="33" Count="0" />
+      <LineId Id="44" Count="0" />
+      <LineId Id="90" Count="1" />
+      <LineId Id="45" Count="0" />
+      <LineId Id="32" Count="0" />
+      <LineId Id="109" Count="0" />
+      <LineId Id="46" Count="0" />
+      <LineId Id="116" Count="9" />
+      <LineId Id="114" Count="0" />
+      <LineId Id="133" Count="2" />
+      <LineId Id="127" Count="3" />
+      <LineId Id="155" Count="0" />
+      <LineId Id="132" Count="0" />
+      <LineId Id="145" Count="0" />
+      <LineId Id="126" Count="0" />
+      <LineId Id="115" Count="0" />
+      <LineId Id="48" Count="0" />
+      <LineId Id="111" Count="0" />
+      <LineId Id="113" Count="0" />
+      <LineId Id="102" Count="0" />
+      <LineId Id="101" Count="0" />
+      <LineId Id="5" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_Portal.M_SetJob_New">
+      <LineId Id="170" Count="0" />
+      <LineId Id="175" Count="0" />
+      <LineId Id="186" Count="1" />
+      <LineId Id="189" Count="2" />
+      <LineId Id="282" Count="0" />
+      <LineId Id="192" Count="0" />
+      <LineId Id="337" Count="1" />
+      <LineId Id="340" Count="1" />
+      <LineId Id="347" Count="2" />
+      <LineId Id="339" Count="0" />
+      <LineId Id="373" Count="0" />
+      <LineId Id="350" Count="0" />
+      <LineId Id="283" Count="0" />
+      <LineId Id="195" Count="2" />
+      <LineId Id="194" Count="0" />
+      <LineId Id="225" Count="0" />
+      <LineId Id="228" Count="0" />
+      <LineId Id="227" Count="0" />
+      <LineId Id="198" Count="1" />
+      <LineId Id="285" Count="2" />
+      <LineId Id="200" Count="0" />
+      <LineId Id="368" Count="0" />
+      <LineId Id="291" Count="0" />
+      <LineId Id="293" Count="0" />
+      <LineId Id="295" Count="0" />
+      <LineId Id="352" Count="1" />
+      <LineId Id="351" Count="0" />
+      <LineId Id="296" Count="0" />
+      <LineId Id="292" Count="0" />
+      <LineId Id="290" Count="0" />
+      <LineId Id="297" Count="1" />
+      <LineId Id="300" Count="1" />
+      <LineId Id="303" Count="0" />
+      <LineId Id="360" Count="0" />
+      <LineId Id="359" Count="0" />
+      <LineId Id="306" Count="0" />
+      <LineId Id="358" Count="0" />
+      <LineId Id="307" Count="2" />
+      <LineId Id="323" Count="1" />
+      <LineId Id="328" Count="1" />
+      <LineId Id="326" Count="0" />
+      <LineId Id="344" Count="2" />
+      <LineId Id="327" Count="0" />
+      <LineId Id="325" Count="0" />
+      <LineId Id="299" Count="0" />
+      <LineId Id="364" Count="3" />
+      <LineId Id="201" Count="1" />
+      <LineId Id="248" Count="0" />
+      <LineId Id="253" Count="0" />
+      <LineId Id="250" Count="0" />
+      <LineId Id="375" Count="0" />
+      <LineId Id="384" Count="1" />
+      <LineId Id="378" Count="5" />
+      <LineId Id="374" Count="0" />
+      <LineId Id="254" Count="2" />
+      <LineId Id="259" Count="1" />
+      <LineId Id="262" Count="1" />
+      <LineId Id="362" Count="0" />
+      <LineId Id="266" Count="0" />
+      <LineId Id="363" Count="0" />
+      <LineId Id="269" Count="0" />
+      <LineId Id="271" Count="1" />
+      <LineId Id="279" Count="0" />
+      <LineId Id="390" Count="1" />
+      <LineId Id="273" Count="1" />
+      <LineId Id="335" Count="1" />
+      <LineId Id="334" Count="0" />
+      <LineId Id="333" Count="0" />
+      <LineId Id="331" Count="1" />
+      <LineId Id="258" Count="0" />
+      <LineId Id="275" Count="3" />
+      <LineId Id="257" Count="0" />
+      <LineId Id="205" Count="0" />
+      <LineId Id="230" Count="7" />
+      <LineId Id="315" Count="0" />
+      <LineId Id="238" Count="8" />
+      <LineId Id="229" Count="0" />
+      <LineId Id="181" Count="4" />
+      <LineId Id="176" Count="0" />
+      <LineId Id="178" Count="0" />
+      <LineId Id="171" Count="0" />
+      <LineId Id="179" Count="1" />
+      <LineId Id="5" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

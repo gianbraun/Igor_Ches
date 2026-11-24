@@ -1,0 +1,77 @@
+﻿<UserControl x:Class="IGOR.Games.TicTacToe.Views.TicTacToeView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:prims="http://prismlibrary.com/"
+             xmlns:conv="clr-namespace:IGOR.Games.TicTacToe.Converter" 
+             xmlns:viewmodels="clr-namespace:IGOR.Games.TicTacToe.ViewModels" 
+             xmlns:comconv="clr-namespace:IGOR.Common.WPF.Converters;assembly=IGOR.Common.WPF"
+             xmlns:cv="OpenCvSharp."
+             HorizontalAlignment="Center"
+             VerticalAlignment="Center"
+             mc:Ignorable="d">
+             <!--prims:ViewModelLocator.AutoWireViewModel="True"-->
+             <!--d:DataContext="{d:DesignInstance Type=viewmodels:TicTacToeViewModel}"-->
+    <UserControl.Resources>
+        <ResourceDictionary Source="pack://application:,,,/IGOR.Common.WPF;component/Styles/DefaultStyle.xaml"/>
+    </UserControl.Resources>
+    
+    <StackPanel Margin="10" Orientation="Horizontal" HorizontalAlignment="Center">
+        
+        <!--Left Column-->
+        <StackPanel Margin="0,0,20,0" MaxHeight="500">
+            <TextBlock Text="Cam Pos:"
+                       Margin="0,0,0,5"/>
+            <ListView ItemsSource="{Binding CamStonePos}">
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="IsEnabled" Value="False"/>
+                    </Style>
+                </ListView.ItemContainerStyle>
+            </ListView>
+
+            <TextBlock Text="HMI Pos:"
+                       Margin="0,10,0,5"/>
+            <ListView ItemsSource="{Binding TouchStones}">
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="IsEnabled" Value="False"/>
+                    </Style>
+                </ListView.ItemContainerStyle>
+            </ListView>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" MinWidth="150">
+                <TextBlock Margin="0,0,5,0">Du spielst:</TextBlock>
+                <TextBlock Text="{Binding Game.HumanPlayer, Converter={conv:PlayerToStringConverter}, Mode=OneWay}"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="10,5" HorizontalAlignment="Center" MinWidth="150">
+                <TextBlock Text="{Binding Game.CurrentState.Self, Converter={conv:PlayerToStringConverter}, Mode=OneWay}"/>
+                <TextBlock Margin="5,0,0,0">ist an der Reihe.</TextBlock>
+            </StackPanel>
+        </StackPanel>
+
+        <!--Central Column-->
+        <StackPanel Width="500"
+                    Height="500"
+                    x:Name="Board">
+            <StackPanel.Resources>
+                <ResourceDictionary >
+                    <Style TargetType="Button">
+                        <Setter Property="Background" Value="White"/>
+                        <Setter Property="BorderBrush" Value="Gray"/>
+                        <Setter Property="BorderThickness" Value="1"/>
+                    </Style>
+                </ResourceDictionary>
+            </StackPanel.Resources>
+        </StackPanel>
+        
+        <!--Right Column-->
+        <Button Content="Spielregeln"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Margin="25"
+                Command="{Binding OpenGameRulesCommand}"/>
+    </StackPanel>
+
+</UserControl>

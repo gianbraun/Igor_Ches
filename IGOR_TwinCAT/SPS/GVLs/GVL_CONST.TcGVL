@@ -1,0 +1,42 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <GVL Name="GVL_CONST" Id="{010f8d77-0020-4375-bf72-b1cf12647f48}">
+    <Declaration><![CDATA[VAR_GLOBAL CONSTANT	
+	STONE_POS_FIELD_Z:	LREAL := 1;
+	MIN_MOVE_HEIGHT_Z:	LREAL := 40; //beachte: Stäbe von Magazin ca. 35 mm -> nicht unter 40 stellen!
+	STONE_HEIGHT:		LREAL := 8; //Steinhöhe in mm -> für Positionen in Magazin
+	
+	MAX_JOB_COUNT:		USINT := 30;
+	MAX_ERRORS:			USINT := 55;
+	
+	X:					USINT := 0;
+	Y:					USINT := 1;
+	Z:					USINT := 2;
+	
+	MAGAZINE_NUMBER:	USINT := 6; //Anzahl Magazine
+	MAGAZINE_CAPACITY:	USINT := 4;	//Anzahl Positionen pro Magazin	
+	
+(******Stapel für Spielsteine******)
+	STACK_POS_X:			LREAL := -97.2; 
+	STACK_1_POS_Y:			LREAL := 52.6;	
+	STACK_2_POS_Y:			LREAL := STACK_1_POS_Y + 28;
+	STACK_3_POS_Y:			LREAL := STACK_2_POS_Y + 28;
+	STACK_4_POS_Y:			LREAL := STACK_3_POS_Y + 94;
+	STACK_5_POS_Y:			LREAL := STACK_4_POS_Y + 28;
+	STACK_6_POS_Y:			LREAL := STACK_5_POS_Y + 28;//258.6
+	STACK_POS_Z_BASE:		LREAL := 3;
+	STACK_POS_Z_BASE_REMOVE:LREAL := 8;
+	
+(******Positionen Magazin-Scan******)
+	STACK_SCAN_POS_X:		LREAL := -59;
+	STACK_1_SCAN_POS_Y:		LREAL := STACK_1_POS_Y + 33.8;
+	STACK_2_SCAN_POS_Y:		LREAL := STACK_2_POS_Y + 33.8;
+	STACK_3_SCAN_POS_Y:		LREAL := STACK_3_POS_Y + 33.8;
+	STACK_4_SCAN_POS_Y:		LREAL := STACK_4_POS_Y + 33.8;
+	STACK_5_SCAN_POS_Y:		LREAL := STACK_5_POS_Y + 33.8;
+	STACK_6_SCAN_POS_Y:		LREAL := STACK_6_POS_Y + 33.8;
+	STACK_SCAN_POS_Z_BASE:	LREAL := 8.5;
+	
+END_VAR]]></Declaration>
+  </GVL>
+</TcPlcObject>

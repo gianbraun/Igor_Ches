@@ -1,0 +1,77 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="FB_Error" Id="{643ec9f9-d7f1-4f20-8f55-a071f44f9ecb}" SpecialFunc="None">
+    <Declaration><![CDATA[{attribute 'reflection'}
+FUNCTION_BLOCK FB_Error
+VAR_OUTPUT
+	bError:		BOOL;
+	nErrorID:	UDINT;
+	eErrorID:	E_ErrorIDs;
+	eErrorSrc:	E_ErrorSrcs;
+	sErrorMsg:	STRING(128);
+	nState:		INT; //State in dem der Error aufgetreten ist
+	
+	//{attribute 'instance-path'}
+	//{attribute 'no_init'}
+	//sSource:	STRING;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name="M_Reset" Id="{bc054357-f4aa-4638-99d3-83b7f76f5261}">
+      <Declaration><![CDATA[METHOD M_Reset
+VAR_INPUT
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF bError THEN
+	HMI.fbErrorCollector.M_QuitError(eErrorID, eErrorSrc);
+	MEMSET(ADR(THIS^), 0, SIZEOF(THIS^));
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_Set" Id="{6fe6d8ed-fd27-46f4-aaf3-4a28d22d6000}">
+      <Declaration><![CDATA[METHOD M_Set
+VAR_INPUT
+	nID:	UDINT;
+	sMsg:	STRING;
+	nState:	INT; //State in dem der Error aufgetreten ist
+	eID:	E_ErrorIDs;
+	eSrc:	E_ErrorSrcs;
+END_VAR
+VAR_INST
+	
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF NOT bError THEN
+	bError := TRUE;
+	nErrorID := nID;
+	sErrorMsg := sMsg;
+	THIS^.nState := nState;
+	eErrorID := eID;
+	eErrorSrc := eSrc;
+	HMI.fbErrorCollector.M_NewError(eID, eSrc, sMsg);
+END_IF	
+	]]></ST>
+      </Implementation>
+    </Method>
+    <LineIds Name="FB_Error">
+      <LineId Id="9" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_Error.M_Reset">
+      <LineId Id="15" Count="0" />
+      <LineId Id="22" Count="0" />
+      <LineId Id="18" Count="0" />
+      <LineId Id="16" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_Error.M_Set">
+      <LineId Id="47" Count="0" />
+      <LineId Id="5" Count="0" />
+      <LineId Id="9" Count="2" />
+      <LineId Id="35" Count="1" />
+      <LineId Id="23" Count="0" />
+      <LineId Id="48" Count="1" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

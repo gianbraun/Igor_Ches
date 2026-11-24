@@ -1,0 +1,17 @@
+﻿[
+  {
+    "Name": "Greifer",
+    "Actions": [
+      {
+        "Name": "Öffnen",
+        "ExecuteAddress": "Hmi.bOpenGripper",
+        "IniAddress": "Hmi.bGripperOpen"
+      },
+      {
+        "Name": "Schließen",
+        "ExecuteAddress": "Hmi.bCloseGripper",
+        "IniAddress": "Hmi.bGripperClosed"
+      }
+    ]
+  }
+]

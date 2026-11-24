@@ -1,0 +1,327 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="FB_IgorCtrl" Id="{0fbc02e5-79f9-4bb2-a045-e538f92682ca}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_IgorCtrl
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+	fbError:	FB_Error;
+END_VAR
+VAR
+	fbPortal:			FB_Portal;
+	fbSafetyMonitoring:	FB_SafetyMonitoring;
+	fbFuseControl:		FB_FuseControl;
+	fbFuseControl48V: 	FB_FuseControl_1;
+	fbLight			:	FB_VI_Light;
+END_VAR
+
+VAR
+	fbBlinkTimer1		: TON;
+	fbBlinkTimer2		: TON;
+	fbTimer				: TON;
+	fbRS				: RS;
+	nCntParty			: UINT;
+	rTrig1				: R_TRIG;
+	rTrig2				: R_TRIG;
+	
+	nRed				: UINT;
+	nGreen				: UINT;
+	nBlue				: UINT;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[A_HmiComm();
+
+fbSafetyMonitoring();
+
+fbFuseControl();
+fbFuseControl48V(bResetChannels := HMI.bQuit);
+
+
+fbPortal(
+	bFuseOk := NOT fbFuseControl.fbError.bError,
+	bFuse48VOk := NOT fbFuseControl.fbError.bError,
+	bManualMode:= HMI.bReqManualCtrl, 
+	stNewJob:= HMI.stJob, 
+	bImportJob:= HMI.bSetJob,
+	bQuit:= HMI.bQuit OR fbPortal.bQuit,//kann quit nicht false setzen
+	bSafetyRun := HMI.bSafetyRun,
+	bSafetyOK=> HMI.bSafetyOK, 
+	bBusy=> HMI.bPortalBusy,
+	fbError=> );
+
+HMI.bGripperClosed := fbPortal.fbGripper.bGripperClosed;
+HMI.bGripperOpen := fbPortal.fbGripper.bGripperOpen;
+
+IF NOT HMI.bSafetyRun AND NOT fbError.bError THEN
+	fbError.M_Set(1, 'Steuerung ausgeschaltet', 0, E_ErrorIDs.eCtrlOff, E_ErrorSrcs.ePlc);
+ELSIF HMI.bSafetyRun AND fbError.bError THEN
+	fbError.M_Reset();
+END_IF
+
+//Set trigger white light
+IF HMI.bLightOn THEN
+	HMI.bLightWin := FALSE;
+	HMI.bLightLose := FALSE;
+	fbLight(bLightOn:= HMI.bLightOn);
+	fbLight.bLightOn := FALSE;
+	fbLight.SetIRGB(255, 255, 255, 255, 100);
+ELSIF NOT HMI.bLightWin AND NOT HMI.bLightLose THEN
+	fbLight(bLightOn:= HMI.bLightOn);
+END_IF
+
+//Set light for win
+IF HMI.bLightWin AND NOT HMI.bLightLose AND NOT HMI.bLightOn THEN
+	fbTimer(IN := TRUE, PT := T#3S);
+	fbRS(SET := TRUE, RESET1 := fbTimer.Q);
+	
+	fbBlinkTimer1(IN := fbRS.Q1 AND NOT fbBlinkTimer2.Q, PT := T#0.5S, Q => fbLight.bLightOn);
+	fbBlinkTimer2(IN := fbBlinkTimer1.Q, PT := T#0.5S);
+	fbLight.SetIRGB(0, 0, 255, 0, 50);
+	
+	IF fbTimer.Q THEN
+		HMI.bLightWin := FALSE;
+		fbLight.bLightOn := FALSE;
+		fbTimer(IN := FALSE);
+		fbRS(SET := FALSE, RESET1 := TRUE);
+	END_IF
+	
+	fbLight();
+ELSE
+	fbRS(SET := FALSE, RESET1 := FALSE);
+END_IF
+
+//set light for lose
+IF HMI.bLightLose AND NOT HMI.bLightWin AND NOT HMI.bLightOn THEN
+	fbTimer(IN := TRUE, PT := T#3S);
+	fbRS(SET := TRUE, RESET1 := fbTimer.Q);
+	
+	fbBlinkTimer1(IN := fbRS.Q1 AND NOT fbBlinkTimer2.Q, PT := T#0.5S, Q => fbLight.bLightOn);
+	fbBlinkTimer2(IN := fbBlinkTimer1.Q, PT := T#0.5S);
+	fbLight.SetIRGB(0, 255, 0, 0, 50);
+	
+	IF fbTimer.Q THEN
+		HMI.bLightLose := FALSE;
+		fbLight.bLightOn := FALSE;
+		fbTimer(IN := FALSE);
+		fbRS(SET := FALSE, RESET1 := TRUE);
+	END_IF
+	
+	fbLight();
+ELSE
+	fbRS(SET := FALSE, RESET1 := FALSE);
+END_IF
+
+//Party-Modus
+IF HMI.bLightParty THEN
+	fbTimer(IN := TRUE, PT := T#30S);
+	fbRS(SET := TRUE, RESET1 := fbTimer.Q);
+	
+	fbBlinkTimer1(IN := fbRS.Q1 AND NOT fbBlinkTimer2.Q, PT := T#0.4S, Q => );
+	fbBlinkTimer2(IN := fbBlinkTimer1.Q, PT := T#0.2S);
+	fbLight.bLightOn := NOT fbBlinkTimer1.Q;
+	IF rTrig1.Q OR rTrig2.Q THEN
+		nCntParty := nCntParty + 1;
+	END_IF
+	
+	CASE nCntParty OF 
+		0: fbLight.SetIRGB(0, 255, 0, 0, 25);
+		1: fbLight.SetIRGB(0, 255, 30, 0, 25);
+		2: fbLight.SetIRGB(0, 255, 255, 0, 25);
+		3: fbLight.SetIRGB(0, 180, 255, 0, 25);
+		4: fbLight.SetIRGB(0, 0, 255, 0, 25);
+		5: fbLight.SetIRGB(0, 0, 255, 150, 25);
+		6: fbLight.SetIRGB(0, 0, 255, 255, 25);
+		7: fbLight.SetIRGB(0, 0, 120, 255, 25);
+		8: fbLight.SetIRGB(0, 0, 0, 255, 25);
+		9: fbLight.SetIRGB(0, 120, 0, 255, 25);
+		10: fbLight.SetIRGB(0, 255, 0, 120, 25); nCntParty := 0;
+	END_CASE
+
+	IF fbTimer.Q THEN
+		HMI.bLightParty := FALSE;
+		nCntParty := 0;
+		fbLight.bLightOn := FALSE;
+		fbTimer(IN := FALSE);
+		fbRS(SET := FALSE, RESET1 := TRUE);
+	END_IF
+	
+	rTrig1(CLK := fbBlinkTimer1.Q);
+	rTrig2(CLK := fbBlinkTimer2.Q);
+	fbLight();
+ELSE
+	fbRS(SET := FALSE, RESET1 := FALSE);
+END_IF]]></ST>
+    </Implementation>
+    <Action Name="A_HmiComm" Id="{1d4a9ff5-a676-4205-9520-cd71c7a6778f}">
+      <Implementation>
+        <ST><![CDATA[IF HMI.stSoftKeyCtrlOn.bIsPressed THEN
+	HMI.bSafetyRun := TRUE;
+END_IF
+IF HMI.stSoftKeyCtrlOff.bIsPressed THEN
+	HMI.bSafetyRun := FALSE;
+END_IF
+IF HMI.stSoftKeyAutoOn.bIsPressed THEN
+	HMI.bReqManualCtrl := FALSE;
+END_IF
+IF HMI.stSoftKeyAutoOff.bIsPressed THEN
+	HMI.bReqManualCtrl := TRUE;
+END_IF
+
+HMI.bInManual := MAIN.fbIgorCtrl.fbPortal.ePortalState = E_PortalState_New.eManualMode;
+
+HMI.bHandInPortal := NOT MAIN.fbIgorCtrl.fbSafetyMonitoring.bLightCurtainOk;
+
+HMI.bQuit := HMI.stSoftKeyQuit.bIsPressed;
+
+IF HMI.bSafetyOK THEN
+	HMI.stSoftKeyCtrlOn.eState := E_ButtonState_ON;
+	HMI.stSoftKeyCtrlOff.eState := E_ButtonState_OFF;
+	
+	IF HMI.bReqManualCtrl THEN
+		IF Main.fbIgorCtrl.fbPortal.ePortalState <> E_PortalState_New.eManualMode THEN
+			HMI.stSoftKeyAutoOn.eState := E_ButtonState_BLINK;
+			HMI.stSoftKeyAutoOff.eState := E_ButtonState_OFF;
+		ELSE
+			HMI.stSoftKeyAutoOn.eState := E_ButtonState_OFF;
+			HMI.stSoftKeyAutoOff.eState := E_ButtonState_ON;
+		END_IF
+	ELSE
+		IF HMI.nNumberErrors = 0 THEN
+			HMI.stSoftKeyAutoOn.eState := E_ButtonState_ON;
+			HMI.stSoftKeyAutoOff.eState := E_ButtonState_OFF;
+		ELSE
+			HMI.stSoftKeyAutoOn.eState := E_ButtonState_OFF;
+			HMI.stSoftKeyAutoOff.eState := E_ButtonState_BLINK;
+		END_IF
+	END_IF
+	
+	IF HMI.nNumberErrors > 0 THEN
+		HMI.stSoftKeyQuit.eState := E_ButtonState_BLINK;
+	ELSE
+		HMI.stSoftKeyQuit.eState := E_ButtonState_OFF;
+	END_IF
+ELSE
+	HMI.stSoftKeyAutoOn.eState := E_ButtonState_OFF;
+	HMI.stSoftKeyAutoOff.eState := E_ButtonState_ON;
+	IF HMI.bSafetyRun THEN
+		HMI.stSoftKeyCtrlOn.eState := E_ButtonState_BLINK;
+		HMI.stSoftKeyCtrlOff.eState := E_ButtonState_OFF;
+		HMI.stSoftKeyQuit.eState := E_ButtonState_BLINK;
+	ELSE
+		HMI.stSoftKeyCtrlOn.eState := E_ButtonState_OFF;
+		HMI.stSoftKeyCtrlOff.eState := E_ButtonState_ON;
+		HMI.stSoftKeyQuit.eState := E_ButtonState_OFF;
+	END_IF
+END_IF
+]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="FB_IgorCtrl">
+      <LineId Id="62" Count="0" />
+      <LineId Id="60" Count="1" />
+      <LineId Id="35" Count="0" />
+      <LineId Id="34" Count="0" />
+      <LineId Id="112" Count="0" />
+      <LineId Id="125" Count="0" />
+      <LineId Id="59" Count="0" />
+      <LineId Id="51" Count="1" />
+      <LineId Id="126" Count="0" />
+      <LineId Id="53" Count="3" />
+      <LineId Id="74" Count="0" />
+      <LineId Id="57" Count="1" />
+      <LineId Id="50" Count="0" />
+      <LineId Id="98" Count="0" />
+      <LineId Id="95" Count="0" />
+      <LineId Id="99" Count="0" />
+      <LineId Id="77" Count="0" />
+      <LineId Id="76" Count="0" />
+      <LineId Id="78" Count="0" />
+      <LineId Id="81" Count="0" />
+      <LineId Id="83" Count="0" />
+      <LineId Id="79" Count="0" />
+      <LineId Id="171" Count="0" />
+      <LineId Id="141" Count="0" />
+      <LineId Id="205" Count="0" />
+      <LineId Id="252" Count="1" />
+      <LineId Id="208" Count="1" />
+      <LineId Id="206" Count="0" />
+      <LineId Id="210" Count="1" />
+      <LineId Id="207" Count="0" />
+      <LineId Id="176" Count="0" />
+      <LineId Id="173" Count="0" />
+      <LineId Id="172" Count="0" />
+      <LineId Id="174" Count="0" />
+      <LineId Id="194" Count="0" />
+      <LineId Id="196" Count="2" />
+      <LineId Id="201" Count="0" />
+      <LineId Id="231" Count="0" />
+      <LineId Id="189" Count="1" />
+      <LineId Id="202" Count="0" />
+      <LineId Id="192" Count="0" />
+      <LineId Id="195" Count="0" />
+      <LineId Id="191" Count="0" />
+      <LineId Id="203" Count="1" />
+      <LineId Id="187" Count="1" />
+      <LineId Id="175" Count="0" />
+      <LineId Id="178" Count="0" />
+      <LineId Id="177" Count="0" />
+      <LineId Id="213" Count="6" />
+      <LineId Id="230" Count="0" />
+      <LineId Id="220" Count="9" />
+      <LineId Id="212" Count="0" />
+      <LineId Id="275" Count="0" />
+      <LineId Id="274" Count="0" />
+      <LineId Id="277" Count="5" />
+      <LineId Id="295" Count="1" />
+      <LineId Id="302" Count="1" />
+      <LineId Id="305" Count="2" />
+      <LineId Id="310" Count="0" />
+      <LineId Id="312" Count="8" />
+      <LineId Id="308" Count="0" />
+      <LineId Id="284" Count="2" />
+      <LineId Id="304" Count="0" />
+      <LineId Id="287" Count="4" />
+      <LineId Id="300" Count="1" />
+      <LineId Id="292" Count="2" />
+      <LineId Id="276" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_IgorCtrl.A_HmiComm">
+      <LineId Id="8" Count="1" />
+      <LineId Id="3" Count="0" />
+      <LineId Id="11" Count="0" />
+      <LineId Id="56" Count="0" />
+      <LineId Id="10" Count="0" />
+      <LineId Id="14" Count="1" />
+      <LineId Id="13" Count="0" />
+      <LineId Id="17" Count="0" />
+      <LineId Id="22" Count="0" />
+      <LineId Id="16" Count="0" />
+      <LineId Id="104" Count="1" />
+      <LineId Id="107" Count="0" />
+      <LineId Id="106" Count="0" />
+      <LineId Id="23" Count="0" />
+      <LineId Id="21" Count="0" />
+      <LineId Id="57" Count="0" />
+      <LineId Id="55" Count="0" />
+      <LineId Id="61" Count="0" />
+      <LineId Id="69" Count="0" />
+      <LineId Id="92" Count="0" />
+      <LineId Id="70" Count="15" />
+      <LineId Id="62" Count="0" />
+      <LineId Id="87" Count="4" />
+      <LineId Id="86" Count="0" />
+      <LineId Id="67" Count="1" />
+      <LineId Id="64" Count="0" />
+      <LineId Id="101" Count="1" />
+      <LineId Id="93" Count="0" />
+      <LineId Id="96" Count="0" />
+      <LineId Id="99" Count="1" />
+      <LineId Id="98" Count="0" />
+      <LineId Id="103" Count="0" />
+      <LineId Id="95" Count="0" />
+      <LineId Id="59" Count="0" />
+      <LineId Id="54" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

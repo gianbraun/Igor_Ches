@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net5.0-windows</TargetFramework>
+	  <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="GameCamViewModel - Kopieren.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="OpenCvSharp4.Windows" Version="4.5.3.20211207" />
+    <PackageReference Include="Prism.Core" Version="8.1.97" />
+    <PackageReference Include="Prism.Wpf" Version="8.1.97" />
+    <PackageReference Include="Serilog" Version="2.10.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Common\IGOR.Common\IGOR.Common.csproj" />
+    <ProjectReference Include="..\IGOR.Interface.Game\IGOR.Interface.Game.csproj" />
+    <ProjectReference Include="..\IGOR.Interface.Navigation\IGOR.Interface.Navigation.csproj" />
+  </ItemGroup>
+
+</Project>

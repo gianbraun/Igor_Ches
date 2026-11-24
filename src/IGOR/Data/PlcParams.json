@@ -1,0 +1,74 @@
+{
+  "DynamicParameters": [
+    {
+      "Value": 100.0,
+      "PlcVariableName": "HMI.fAxesOverride",
+      "Name": "Achsen Override Automatikbetrieb",
+      "Unit": "%",
+      "TypeName": "System.Double",
+      "Group": "Achsen",
+      "Min": 0.1,
+      "Max": 100.0
+    },	
+    {
+      "Value": 20.0,
+      "PlcVariableName": "HMI.fAxesOverrideMan",
+      "Name": "Achsen Override Handbetrieb",
+      "Unit": "%",
+      "TypeName": "System.Double",
+      "Group": "Achsen",
+      "Min": 0.1,
+      "Max": 100.0
+    },
+    {
+      "Value": -20.0,
+      "PlcVariableName": "HMI.fPortalPosIdleX",
+      "Name": "Parkposition X",
+      "Unit": "mm",
+      "TypeName": "System.Double",
+      "Group": "Achsen",
+      "Min": -20.0,
+      "Max": 415.0
+    },
+    {
+      "Value": 0.0,
+      "PlcVariableName": "HMI.fPortalPosIdleY",
+      "Name": "Parkposition Y",
+      "Unit": "mm",
+      "TypeName": "System.Double",
+      "Group": "Achsen",
+      "Min": 0.0,
+      "Max": 290.0
+    },
+    {
+      "Value": 50.0,
+      "PlcVariableName": "HMI.fPortalPosIdleZ",
+      "Name": "Parkposition Z",
+      "Unit": "mm",
+      "TypeName": "System.Double",
+      "Group": "Achsen",
+      "Min": 40.0,
+      "Max": 85.0
+    },
+    {
+      "Value": -1.1,
+      "PlcVariableName": "HMI.fScreenPosOffsetX",
+      "Name": "Offset Steinpositionen auf Feld X",
+      "Unit": "mm",
+      "TypeName": "System.Double",
+      "Group": "Achsen",
+      "Min": -2.0,
+      "Max": 2.0
+    },
+    {
+      "Value": 0.7,
+      "PlcVariableName": "HMI.fScreenPosOffsetY",
+      "Name": "Offset Steinpositionen auf Feld Y",
+      "Unit": "mm",
+      "TypeName": "System.Double",
+      "Group": "Achsen",
+      "Min": -2.0,
+      "Max": 2.0
+    }
+  ]
+}

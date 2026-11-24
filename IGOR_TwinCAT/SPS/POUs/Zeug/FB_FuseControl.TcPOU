@@ -1,0 +1,61 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="FB_FuseControl" Id="{5274ca77-2d19-495b-afdf-f0f4c9c09e36}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_FuseControl
+VAR_INPUT
+	bResetChannels:	BOOL;
+END_VAR
+VAR_OUTPUT
+	fbError:		FB_Error;
+END_VAR
+VAR
+	fbBlockFuse:	FB_BlockEconomySmart;
+	nChannel:		INT;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fbBlockFuse();
+FOR nChannel := fbBlockFuse.MIN_CHANNEL TO fbBlockFuse.MAX_CHANNEL DO
+	CASE fbBlockFuse.Status[nChannel] OF 
+		fbBlockFuse.STATUS_TRIP:
+			fbError.M_Set(1, CONCAT('Sicherung hat ausgelöst! Kanal ', TO_STRING(nChannel)), 0, E_ErrorIDs.eFuseTripped, E_ErrorSrcs.eFuse);
+			EXIT;
+		fbBlockFuse.STATUS_OVERCURRENT:
+			fbError.M_Set(1, CONCAT('Sicherung Überstrom! Kanal ', TO_STRING(nChannel)), 0, E_ErrorIDs.eFuseOvercurrent, E_ErrorSrcs.eFuse);
+			EXIT;
+		fbBlockFuse.STATUS_OFF:
+			fbError.M_Set(1, CONCAT('Sicherung ausgeschaltet! Kanal ', TO_STRING(nChannel)), 0, E_ErrorIDs.eFuseOff, E_ErrorSrcs.eFuse);
+			EXIT;
+		fbBlockFuse.STATUS_ON:
+			IF fbError.bError THEN
+				fbError.M_Reset();				
+			END_IF
+		ELSE
+			fbError.M_Set(1, CONCAT('Sicherung ausgeschaltet! Kanal ', TO_STRING(nChannel)), 0, E_ErrorIDs.eFuseOff, E_ErrorSrcs.eFuse);
+			EXIT;
+	END_CASE
+END_FOR
+
+IF fbBlockFuse.FuseTripped AND bResetChannels THEN
+	fbBlockFuse.reset();
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="FB_FuseControl">
+      <LineId Id="9" Count="0" />
+      <LineId Id="21" Count="0" />
+      <LineId Id="37" Count="2" />
+      <LineId Id="43" Count="2" />
+      <LineId Id="49" Count="4" />
+      <LineId Id="57" Count="0" />
+      <LineId Id="60" Count="0" />
+      <LineId Id="59" Count="0" />
+      <LineId Id="63" Count="1" />
+      <LineId Id="61" Count="0" />
+      <LineId Id="25" Count="0" />
+      <LineId Id="19" Count="0" />
+      <LineId Id="28" Count="0" />
+      <LineId Id="27" Count="0" />
+      <LineId Id="29" Count="1" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

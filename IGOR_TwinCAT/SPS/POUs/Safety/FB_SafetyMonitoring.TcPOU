@@ -1,0 +1,72 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.9">
+  <POU Name="FB_SafetyMonitoring" Id="{6e33ecd6-c7ba-4b92-a48d-0c0cb134308d}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_SafetyMonitoring
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+	bQuitDone:				BOOL;
+	fbError:				FB_Error;
+	
+	bLightCurtainOk AT %I*:	BOOL;
+	bEStopButtonOk 	AT %I*:	BOOL;
+END_VAR
+VAR
+	fbGroup:				FB_SafeGroup;
+
+	fbMonLightCurtain:		FB_SafeMon;
+	fbMonEStop:				FB_SafeMon;
+	fbMonSafetyGroup:		FB_SafeMon;
+	fbEStop:				FB_SafeEStop;
+	
+	nDrvInfoData1	AT %I*:	WORD;
+	nDrvInfoData2	AT %I*:	WORD;
+	nDrvInfoData3	AT %I*:	WORD;
+	bCollectEDM		AT %Q*:	BOOL;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fbGroup(bIsReset => bQuitDone);
+fbMonLightCurtain();
+fbMonEStop();
+fbMonSafetyGroup();
+fbEStop();
+IF fbMonLightCurtain.fbError.bError 
+	OR fbMonEStop.fbError.bError
+	OR fbMonSafetyGroup.fbError.bError
+	OR fbEStop.fbError.bError
+	OR fbGroup.fbError.bError
+THEN
+	fbError.M_Set(1, 'Safety-Fehler', 0, E_ErrorIDs.eUndefinedError, E_ErrorSrcs.eSafety);
+END_IF
+
+bCollectEDM := NOT nDrvInfoData1.8
+			AND NOT nDrvInfoData2.8
+			AND NOT nDrvInfoData3.8;
+			
+IF NOT bEStopButtonOk THEN
+	fbError.M_Set(1, 'Not-Aus betätigt', 0, E_ErrorIDs.eEStopPressed, eSrc := E_ErrorSrcs.eSafety);
+ELSIF NOT bLightCurtainOk THEN
+	fbError.M_Set(1, 'Lichtgitter ausgelöst', 0, E_ErrorIDs.eLightCurtain, eSrc := E_ErrorSrcs.eSafety);
+ELSIF fbError.bError THEN
+	fbError.M_Reset();
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="FB_SafetyMonitoring">
+      <LineId Id="53" Count="3" />
+      <LineId Id="67" Count="0" />
+      <LineId Id="87" Count="0" />
+      <LineId Id="176" Count="0" />
+      <LineId Id="89" Count="2" />
+      <LineId Id="177" Count="1" />
+      <LineId Id="23" Count="0" />
+      <LineId Id="109" Count="0" />
+      <LineId Id="108" Count="0" />
+      <LineId Id="117" Count="1" />
+      <LineId Id="143" Count="2" />
+      <LineId Id="147" Count="0" />
+      <LineId Id="149" Count="2" />
+      <LineId Id="146" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

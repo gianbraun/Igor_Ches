@@ -1,0 +1,205 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.9">
+  <POU Name="FB_AxisCtrl" Id="{5e5d3dfb-3f69-49d3-a1f9-b7ff669841aa}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_AxisCtrl
+VAR_INPUT
+	eCommandIn:			E_AxesCmd;
+	fPos:				LREAL;
+	fVelo:				LREAL;
+	bJogFw:				BOOL;
+	bJogBw:				BOOL;
+	
+	bReset:				BOOL := TRUE;
+END_VAR             	
+VAR_OUTPUT
+	bBusy:				BOOL;
+	fbError:			FB_Error;
+	bInRefPos AT %I* :	BOOL;
+END_VAR             	
+VAR_IN_OUT          	
+	stAxis:				AXIS_REF;
+END_VAR
+VAR	
+	eCommandAct:		E_AxesCmd;
+	
+	fbTimeout:			TON := (PT := T#90S);
+
+//Achsen steuern
+	fbMoveAbsolute:		MC_MoveAbsolute;
+	fbMoveRelative:		MC_MoveRelative;
+	fbJog:				MC_Jog;
+	fbStop:				MC_Halt;
+	fbReset:			MC_Reset;	
+	fbSetPos:			MC_SetPosition;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[A_Cycle();
+
+CASE eCommandAct OF
+	E_AxesCmd_IDLE:
+		IF eCommandIn <> E_AxesCmd_IDLE THEN //neuer Auftrag
+			eCommandAct := eCommandIn; //neuen Command speichern
+		END_IF
+		
+	E_AxesCmd_MOVE_ABS:
+		fbMoveAbsolute(Axis := stAxis, Execute := TRUE, Position := fPos, Velocity := fVelo);
+		IF NOT fbMoveAbsolute.Busy THEN
+			IF fbMoveAbsolute.Error THEN
+				fbError.M_Set(fbMoveAbsolute.ErrorID, 'Achsen Fehler!', eCommandAct, eID := E_ErrorIDs.eAbsMove, eSrc := E_ErrorSrcs.eAxisCtrlPtp);
+				eCommandAct := E_AxesCmd_ERROR;
+			ELSE
+				eCommandAct := E_AxesCmd_FINISHED;
+			END_IF
+			fbMoveAbsolute(Axis := stAxis, Execute := FALSE);
+		ELSIF eCommandIn <> eCommandAct THEN
+			fbMoveAbsolute(Axis := stAxis, Execute := FALSE);
+			eCommandAct := E_AxesCmd_STOP;
+		END_IF
+		
+	E_AxesCmd_MOVE_REL:
+		fbMoveRelative(Axis := stAxis, Execute := TRUE, Distance := fPos, Velocity := fVelo);
+		IF NOT fbMoveRelative.Busy THEN
+			IF fbMoveRelative.Error THEN
+				fbError.M_Set(fbMoveRelative.ErrorID, 'Achsen Fehler!', eCommandAct, eID := E_ErrorIDs.eRelMove, eSrc := E_ErrorSrcs.eAxisCtrlPtp);
+				eCommandAct := E_AxesCmd_ERROR;
+			ELSE
+				eCommandAct := E_AxesCmd_FINISHED;
+			END_IF
+			fbMoveRelative(Axis := stAxis, Execute := FALSE);
+		ELSIF eCommandIn <> eCommandAct THEN
+			fbMoveRelative(Axis := stAxis, Execute := FALSE);
+			eCommandAct := E_AxesCmd_STOP;
+		END_IF
+		
+	E_AxesCmd_JOG:
+		fbJog(Axis := stAxis, JogForward := bJogFw, JogBackwards := bJogFw, Mode := MC_JOGMODE_CONTINOUS, Velocity := fVelo);
+		IF eCommandIn <> eCommandAct THEN
+			fbJog(Axis := stAxis, JogForward := FALSE, JogBackwards := FALSE);
+			eCommandAct := E_AxesCmd_IDLE;
+		ELSIF fbJog.Error THEN
+			fbError.M_Set(fbJog.ErrorID, 'Achsen Fehler!', eCommandAct, eID := E_ErrorIDs.eJog, eSrc := E_ErrorSrcs.eAxisCtrlPtp);
+			eCommandAct := E_AxesCmd_ERROR;
+		END_IF
+	
+	E_AxesCmd_STOP:
+		fbStop(Axis := stAxis, Execute := TRUE);
+		IF NOT fbStop.Busy THEN
+			IF fbStop.Error THEN
+				fbError.M_Set(fbStop.ErrorID, 'Achsen Fehler!', eCommandAct, eID := E_ErrorIDs.eJog, eSrc := E_ErrorSrcs.eAxisCtrlPtp);
+				eCommandAct := E_AxesCmd_ERROR;
+			ELSE
+				eCommandAct := E_AxesCmd_FINISHED;
+			END_IF
+			fbStop(Axis := stAxis, Execute := FALSE);
+		END_IF
+		
+	E_AxesCmd_FINISHED:
+		IF eCommandIn = E_AxesCmd_IDLE THEN
+			eCommandAct := E_AxesCmd_IDLE;
+		END_IF
+		
+	E_AxesCmd_RESET:
+		fbReset(Axis := stAxis, Execute := TRUE);
+		IF NOT fbReset.Busy THEN
+			IF fbReset.Error THEN
+				fbError.M_Set(fbReset.ErrorID, 'Fehler bei Reset!', eCommandAct, eID := E_ErrorIDs.eResetAxis, eSrc := E_ErrorSrcs.eAxisCtrlPtp);
+				eCommandAct := E_AxesCmd_ERROR;
+			ELSE
+				fbError.M_Reset();
+				eCommandAct := E_AxesCmd_IDLE;
+			END_IF
+			fbReset(Axis := stAxis, Execute := FALSE);
+		END_IF
+		
+	E_AxesCmd_ERROR:
+		;
+	
+END_CASE
+]]></ST>
+    </Implementation>
+    <Action Name="A_Cycle" Id="{4bf8b09d-cf47-438a-8aff-0b008511a4b9}">
+      <Implementation>
+        <ST><![CDATA[
+IF bReset THEN
+	stAxis.ReadStatus();
+	IF eCommandAct = E_AxesCmd_ERROR OR stAxis.Status.Error THEN
+		eCommandAct := E_AxesCmd_RESET;				
+	END_IF			
+	bReset := FALSE;
+END_IF
+
+bBusy := eCommandAct <> E_AxesCmd_IDLE
+	 AND eCommandAct <> E_AxesCmd_ERROR
+	 AND eCommandAct <> E_AxesCmd_FINISHED;]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="FB_AxisCtrl">
+      <LineId Id="762" Count="0" />
+      <LineId Id="514" Count="0" />
+      <LineId Id="415" Count="1" />
+      <LineId Id="619" Count="0" />
+      <LineId Id="418" Count="0" />
+      <LineId Id="618" Count="0" />
+      <LineId Id="573" Count="0" />
+      <LineId Id="421" Count="1" />
+      <LineId Id="439" Count="1" />
+      <LineId Id="451" Count="0" />
+      <LineId Id="453" Count="0" />
+      <LineId Id="444" Count="1" />
+      <LineId Id="443" Count="0" />
+      <LineId Id="486" Count="1" />
+      <LineId Id="489" Count="0" />
+      <LineId Id="455" Count="0" />
+      <LineId Id="441" Count="0" />
+      <LineId Id="424" Count="0" />
+      <LineId Id="456" Count="2" />
+      <LineId Id="461" Count="0" />
+      <LineId Id="563" Count="0" />
+      <LineId Id="462" Count="4" />
+      <LineId Id="483" Count="0" />
+      <LineId Id="485" Count="0" />
+      <LineId Id="481" Count="0" />
+      <LineId Id="425" Count="0" />
+      <LineId Id="427" Count="0" />
+      <LineId Id="467" Count="2" />
+      <LineId Id="479" Count="1" />
+      <LineId Id="472" Count="0" />
+      <LineId Id="564" Count="0" />
+      <LineId Id="477" Count="0" />
+      <LineId Id="428" Count="0" />
+      <LineId Id="430" Count="1" />
+      <LineId Id="490" Count="1" />
+      <LineId Id="494" Count="0" />
+      <LineId Id="565" Count="0" />
+      <LineId Id="495" Count="3" />
+      <LineId Id="616" Count="0" />
+      <LineId Id="500" Count="0" />
+      <LineId Id="576" Count="0" />
+      <LineId Id="574" Count="0" />
+      <LineId Id="578" Count="0" />
+      <LineId Id="581" Count="0" />
+      <LineId Id="580" Count="0" />
+      <LineId Id="499" Count="0" />
+      <LineId Id="501" Count="2" />
+      <LineId Id="506" Count="0" />
+      <LineId Id="566" Count="0" />
+      <LineId Id="507" Count="1" />
+      <LineId Id="761" Count="0" />
+      <LineId Id="509" Count="1" />
+      <LineId Id="617" Count="0" />
+      <LineId Id="511" Count="0" />
+      <LineId Id="436" Count="1" />
+      <LineId Id="658" Count="1" />
+      <LineId Id="193" Count="0" />
+      <LineId Id="726" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_AxisCtrl.A_Cycle">
+      <LineId Id="2" Count="1" />
+      <LineId Id="5" Count="3" />
+      <LineId Id="13" Count="0" />
+      <LineId Id="9" Count="3" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

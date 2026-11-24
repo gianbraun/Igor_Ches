@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <DUT Name="ST_DeviceState" Id="{eaa93891-539b-4ce3-aaff-4c75127722ac}">
+    <Declaration><![CDATA[TYPE ST_DeviceState :
+STRUCT
+	Ready		AT%I*	: BIT;
+	Warning		AT%I*	: BIT;
+	Error		AT%I*	: BIT;
+	Diag		AT%I*	: BIT;
+	State		AT%I*	: UDINT;
+	SwitchOnCnt	AT%I*	: UDINT;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

@@ -1,0 +1,22 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:ax="clr-namespace:IGOR.Interface.Communication.Axis;assembly=IGOR.Interface.Communication"
+                    xmlns:ac="clr-namespace:IGOR.Interface.Communication.Actor;assembly=IGOR.Interface.Communication">
+    <DataTemplate x:Key="AxisOverviewTemplate"
+                  DataType="{x:Type ax:IAxis}">
+        <StackPanel Orientation="Horizontal">
+            <TextBlock Text="{Binding Name}"
+                       Margin="20,10"
+                       FontSize="16"/>
+        </StackPanel>
+    </DataTemplate>
+
+    <DataTemplate x:Key="ActorOverviewTemplate"
+                  DataType="{x:Type ac:IActor}">
+        <StackPanel Orientation="Horizontal">
+            <TextBlock Text="{Binding Name}"
+                       Margin="20,10"
+                       FontSize="16"/>
+        </StackPanel>
+    </DataTemplate>
+</ResourceDictionary>

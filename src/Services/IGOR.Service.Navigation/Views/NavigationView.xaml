@@ -1,0 +1,62 @@
+﻿<UserControl x:Class="IGOR.Service.Navigation.Views.NavigationView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"  
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             mc:Ignorable="d"
+             xmlns:prism="http://prismlibrary.com/" 
+             xmlns:vm="clr-namespace:IGOR.Service.Navigation.ViewModels"
+             d:DataContext="{d:DesignInstance Type=vm:NavigationViewModel}"
+             prism:ViewModelLocator.AutoWireViewModel="True"
+             Background="{StaticResource MainBrush}">
+              
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/IGOR.Common.WPF;component/Styles/DefaultStyle.xaml"/>
+                <ResourceDictionary Source="pack://application:,,,/IGOR.Service.Navigation;component/Styles/NavigationButtonStyle.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+        
+    </UserControl.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="auto"/>
+        </Grid.RowDefinitions>
+        <ItemsControl ItemsSource="{Binding NavigationService.NavigationButtons}"
+                  ItemTemplate="{StaticResource NavigationButtonTemplate}"
+                  BorderThickness="0"/>
+        <Button Style="{StaticResource NavigationButton}"
+                Grid.Row="1"
+                HorizontalContentAlignment="Stretch"
+                VerticalContentAlignment="Stretch"
+                Click="Button_Click"
+                Margin="10">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="auto"/>
+                </Grid.RowDefinitions>
+                <Viewbox Width="40"
+                         Height="40"
+                         Margin="0,2">
+                    <Grid>
+                        <Line X1="0" Y1="0" X2="100" Y2="100" Stroke="{StaticResource ForegroundDarkBrush}" StrokeThickness="8"/>
+                        <Line X1="0" Y1="100" X2="100" Y2="0" Stroke="{StaticResource ForegroundDarkBrush}" StrokeThickness="8"/>
+                    </Grid>
+                </Viewbox>
+                <TextBlock Text="Schließen"
+                           Grid.Row="1"
+                           Margin="0,0,0,5"
+                           Foreground="{StaticResource ForegroundDarkBrush}"
+                           HorizontalAlignment="Center"
+                           FontSize="14"
+                           FontFamily="Segoe UI"/>
+            </Grid>
+        </Button>
+    </Grid>
+
+
+
+</UserControl>

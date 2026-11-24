@@ -1,0 +1,14 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.9">
+  <DUT Name="E_ButtonState" Id="{dc3df50e-113b-4b98-a168-bc198067458a}">
+    <Declaration><![CDATA[{attribute 'strict'}
+TYPE E_ButtonState :
+(
+	E_ButtonState_OFF := 0,
+	E_ButtonState_ON,
+	E_ButtonState_BLINK
+);
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

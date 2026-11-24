@@ -1,0 +1,59 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <GVL Name="HMI" Id="{b390b5a2-94fb-4532-b048-b127e48b8e13}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+VAR_GLOBAL	
+//TO HMI
+	bErrorChange:		BOOL;
+	aErrors:			ARRAY [0..MAX_ERRORS - 1] OF ST_Error;
+	nNumberErrors:		UINT;
+	bSafetyOK:			BOOL;
+	bPortalBusy:		BOOL;
+	bInManual:			BOOL;
+	bGripperOpen:		BOOL;
+	bGripperClosed:		BOOL;
+	bHandInPortal:		BOOL; 
+	
+//FROM HMI
+	bQuit:				BOOL;
+	
+	bSetJob:			BOOL;
+	stJob:				ST_PortalJob;
+	stLastJob:			ST_PortalJob;
+     	
+	bReqManualCtrl:		BOOL := TRUE;
+	bOpenGripper:		BOOL;
+	bCloseGripper:		BOOL;
+	bSafetyRun:			BOOL;
+	
+	bLightOn:			BOOL;
+	bLightWin: 			BOOL;
+	bLightLose:			BOOL;
+	
+	bLightParty: 		BOOL;
+	
+	bAllJobsSend: 		BOOL; 
+	
+//TO AND FROM HMI
+	stSoftKeyCtrlOn:	ST_SoftKey;
+	stSoftKeyCtrlOff:	ST_SoftKey;
+	stSoftKeyAutoOn:	ST_SoftKey;
+	stSoftKeyAutoOff:	ST_SoftKey;
+	stSoftKeyQuit:		ST_SoftKey;
+
+//system
+	fbErrorCollector:	FB_ErrorCollector;
+	
+//parameters
+	fAxesOverride:		LREAL := 100.0;
+	fAxesOverrideMan:	LREAL := 20.0;
+	
+	fPortalPosIdleX:	LREAL := -20;
+	fPortalPosIdleY:	LREAL := 0;
+	fPortalPosIdleZ:	LREAL := 50;
+
+	fScreenPosOffsetX:	LREAL := 0;
+	fScreenPosOffsetY:	LREAL := 0;
+END_VAR]]></Declaration>
+  </GVL>
+</TcPlcObject>

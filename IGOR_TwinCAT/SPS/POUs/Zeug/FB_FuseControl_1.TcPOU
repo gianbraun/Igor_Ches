@@ -1,0 +1,57 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="FB_FuseControl_1" Id="{02682e8a-00ae-481b-aba2-dd95afe50c1f}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_FuseControl_1
+VAR_INPUT
+	bResetChannels:	BOOL;
+END_VAR
+VAR_OUTPUT
+	fbError:		FB_Error;
+END_VAR
+VAR
+	bInFuse		AT %I* : BOOL;
+	bOutFuse	AT %Q* : BOOL;
+	
+	fbDelay				: TON;
+	
+	fbRS				: RS;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fbRS(SET := bResetChannels, RESET1 := FALSE);
+IF NOT bInFuse THEN
+	fbError.M_Set(1, '48V-Sicherung hat ausgelöst', 0, E_ErrorIDs.eFuseTripped, E_ErrorSrcs.eFuse);
+	fbDelay(IN := FALSE);
+END_IF
+
+IF fbRS.Q1 THEN
+	fbDelay(IN := TRUE, PT := T#700MS);
+	IF bInFuse THEN
+		bOutFuse := TRUE;
+	END_IF
+	IF fbDelay.Q THEN
+		fbDelay(IN := FALSE);
+		bOutFuse := FALSE;
+		fbRS(SET := bResetChannels, RESET1 := TRUE);
+	END_IF
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="FB_FuseControl_1">
+      <LineId Id="96" Count="0" />
+      <LineId Id="38" Count="0" />
+      <LineId Id="77" Count="0" />
+      <LineId Id="84" Count="0" />
+      <LineId Id="78" Count="0" />
+      <LineId Id="19" Count="0" />
+      <LineId Id="30" Count="0" />
+      <LineId Id="80" Count="0" />
+      <LineId Id="102" Count="2" />
+      <LineId Id="88" Count="0" />
+      <LineId Id="108" Count="0" />
+      <LineId Id="105" Count="0" />
+      <LineId Id="107" Count="0" />
+      <LineId Id="106" Count="0" />
+      <LineId Id="81" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

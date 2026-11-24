@@ -1,0 +1,151 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="FB_AxesEnable" Id="{99414854-69cd-49ca-984e-d64791bedf4d}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_AxesEnable
+VAR_INPUT
+	bEnableAxes: 		BOOL := TRUE;
+	bEnableXY:			BOOL;
+	bEnableZp:			BOOL;
+	bEnableZn:			BOOL;
+	bReset:				BOOL;
+	fOverride:			LREAL := 10;
+END_VAR             	
+VAR_OUTPUT          	
+	bAllAxesReady:		BOOL := FALSE;
+	fbError:			FB_Error;
+END_VAR             	
+VAR_IN_OUT          	
+	stX:				AXIS_REF;
+	stY:				AXIS_REF;
+	stZ:				AXIS_REF;
+END_VAR
+VAR	
+//Freigaben
+	fbPowerX:			MC_Power;
+	fbPowerY:			MC_Power;
+	fbPowerZ:			MC_Power;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[
+IF NOT (__ISVALIDREF(stX) AND __ISVALIDREF(stY) AND __ISVALIDREF(stZ)) THEN
+	fbError.M_Set(1798, 'Üngültige Referenz der Achsen', 0, eID := E_ErrorIDs.eInvalidReference, eSrc := E_ErrorSrcs.ePlc);
+	RETURN;
+END_IF
+
+IF bReset THEN
+	fbError.M_Reset();
+	bReset := FALSE;
+END_IF
+
+stX.ReadStatus();
+stY.ReadStatus();
+stZ.ReadStatus();
+
+fbPowerX(
+	Enable:=bEnableAxes AND bEnableXY, 
+	Enable_Positive:=bEnableAxes AND bEnableXY, 
+	Enable_Negative:=bEnableAxes AND bEnableXY, 
+	Override:=fOverride, 
+	BufferMode:= , 
+	Axis:=stX, 
+	Status=> , 
+	Busy=> , 
+	Active=> , 
+	Error=> , 
+	ErrorID=> );
+	
+fbPowerY(
+	Enable:=bEnableAxes AND bEnableXY, 
+	Enable_Positive:=bEnableAxes AND bEnableXY, 
+	Enable_Negative:=bEnableAxes AND bEnableXY, 
+	Override:=fOverride, 
+	BufferMode:= , 
+	Axis:=stY, 
+	Status=> , 
+	Busy=> , 
+	Active=> , 
+	Error=> , 
+	ErrorID=> );	
+	
+fbPowerZ(
+	Enable:=bEnableAxes, 
+	Enable_Positive:=bEnableAxes AND bEnableZp, 
+	Enable_Negative:=bEnableAxes AND bEnableZn, 
+	Override:=fOverride, 
+	BufferMode:= , 
+	Axis:=stZ, 
+	Status=> , 
+	Busy=> , 
+	Active=> , 
+	Error=> , 
+	ErrorID=> );		
+	
+bAllAxesReady := stX.Status.Operational AND stY.Status.Operational AND stZ.Status.Operational;
+IF fbPowerX.Error THEN
+	fbError.M_Set(fbPowerX.ErrorID, 'Achse X Error', 0, eID := E_ErrorIDs.eAxisRelease, eSrc := E_ErrorSrcs.eAxisX);
+ELSIF fbPowerY.Error THEN
+	fbError.M_Set(fbPowerY.ErrorID, 'Achse Y Error', 0, eID := E_ErrorIDs.eAxisRelease, eSrc := E_ErrorSrcs.eAxisY);
+ELSIF fbPowerZ.Error THEN
+	fbError.M_Set(fbPowerZ.ErrorID, 'Achse Z Error', 0, eID := E_ErrorIDs.eAxisRelease, eSrc := E_ErrorSrcs.eAxisZ);
+END_IF]]></ST>
+    </Implementation>
+    <Method Name="M_DisableAxes" Id="{48de92bb-1aa1-4a25-8e68-a47f73eac763}">
+      <Declaration><![CDATA[METHOD M_DisableAxes
+VAR_INPUT
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[bEnableAxes:= FALSE;
+bEnableXY:= FALSE;
+bEnableZp:= FALSE; 
+bEnableZn:= FALSE;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_EnableAxes" Id="{14e6e14f-2c7a-408f-8812-95d47b4eda5b}">
+      <Declaration><![CDATA[METHOD M_EnableAxes
+VAR_INPUT
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[bEnableAxes:= TRUE;
+bEnableXY:= TRUE;
+bEnableZp:= TRUE; 
+bEnableZn:= TRUE;]]></ST>
+      </Implementation>
+    </Method>
+    <LineIds Name="FB_AxesEnable">
+      <LineId Id="219" Count="0" />
+      <LineId Id="216" Count="0" />
+      <LineId Id="222" Count="1" />
+      <LineId Id="221" Count="0" />
+      <LineId Id="264" Count="0" />
+      <LineId Id="217" Count="0" />
+      <LineId Id="265" Count="0" />
+      <LineId Id="267" Count="0" />
+      <LineId Id="266" Count="0" />
+      <LineId Id="218" Count="0" />
+      <LineId Id="3" Count="1" />
+      <LineId Id="8" Count="0" />
+      <LineId Id="10" Count="12" />
+      <LineId Id="172" Count="0" />
+      <LineId Id="23" Count="11" />
+      <LineId Id="171" Count="0" />
+      <LineId Id="35" Count="10" />
+      <LineId Id="82" Count="0" />
+      <LineId Id="170" Count="0" />
+      <LineId Id="234" Count="2" />
+      <LineId Id="238" Count="1" />
+      <LineId Id="241" Count="1" />
+      <LineId Id="225" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_AxesEnable.M_DisableAxes">
+      <LineId Id="6" Count="2" />
+      <LineId Id="5" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_AxesEnable.M_EnableAxes">
+      <LineId Id="6" Count="2" />
+      <LineId Id="5" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

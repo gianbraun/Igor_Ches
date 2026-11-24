@@ -1,0 +1,23 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.9">
+  <DUT Name="E_PortalState" Id="{85da447f-7dbd-4125-83c5-8b7cdb924be5}">
+    <Declaration><![CDATA[TYPE E_PortalState :
+(
+	E_PortalState_INIT := 0,
+	E_PortalState_IDLE,
+	E_PortalState_SET_JOB,
+	E_PortalState_MOVE_TO_STONE,
+	E_PortalState_TRANSPORT_STONE,
+	E_PortalState_WAITGRIPPER_OPEN,
+	E_PortalState_WAITGRIPPER_CLOSE,
+	E_PortalState_HOME,
+	E_PortalState_ESTOP,
+	E_PortalState_AFTER_ESTOP,
+	E_PortalState_MANUAL_MODE,
+	E_PortalState_SCAN_MAGS,
+	E_PortalState_ERROR := 99
+);
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

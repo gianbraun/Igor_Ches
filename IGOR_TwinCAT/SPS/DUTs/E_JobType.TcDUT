@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.9">
+  <DUT Name="E_JobType" Id="{3a28bf40-c80a-4ed1-9bcd-c95db6d216cd}">
+    <Declaration><![CDATA[TYPE E_JobType :
+(
+	E_JobType_MoveStone,
+	E_JobType_NewStone,
+	E_JobType_RemoveStone
+);
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

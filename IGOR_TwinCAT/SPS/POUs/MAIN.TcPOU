@@ -1,0 +1,17 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.9">
+  <POU Name="MAIN" Id="{8fb21f47-0787-4c92-8c3b-9716b5a9abe0}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM MAIN
+VAR
+	fbIgorCtrl:			FB_IgorCtrl;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fbIgorCtrl();
+]]></ST>
+    </Implementation>
+    <LineIds Name="MAIN">
+      <LineId Id="64" Count="1" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

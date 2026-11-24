@@ -1,0 +1,22 @@
+﻿<UserControl x:Class="IGOR.Games.TicTacToe.Views.TicTacToeBoardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             
+             xmlns:conv="clr-namespace:IGOR.Games.TicTacToe.Converter"
+             xmlns:comConv="clr-namespace:IGOR.Common.WPF.Converters;assembly=IGOR.Common.WPF"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:IGOR.Games.TicTacToe.Views"
+             mc:Ignorable="d" 
+             d:DesignHeight="1024" d:DesignWidth="1280">
+
+    <Grid>
+
+        <Canvas x:Name="DrawingCanvas"/>
+
+        <!--Draw Differences-->
+        <Canvas x:Name="DifferencesCanvas"/> 
+         
+    </Grid>
+
+</UserControl>

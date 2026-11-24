@@ -1,0 +1,254 @@
+﻿<UserControl x:Class="IGOR.Display.ManualOperations.Views.AxisDetailView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:conv="clr-namespace:IGOR.Common.WPF.Converters;assembly=IGOR.Common.WPF"
+             xmlns:viewmodels="clr-namespace:IGOR.Display.ManualOperations.ViewModels" 
+             xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
+             d:DataContext="{d:DesignInstance Type=viewmodels:AxisDetailViewModel}"
+             mc:Ignorable="d">
+    <UserControl.Resources>
+        <ResourceDictionary Source="pack://application:,,,/IGOR.Display.ManualOperations;component/Styles/Styles.xaml"/>
+    </UserControl.Resources>
+    
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="auto"/>
+            <RowDefinition Height="auto"/>
+            <RowDefinition Height="auto"/>
+            <RowDefinition Height="auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition/>
+                <ColumnDefinition/>
+            </Grid.ColumnDefinitions>
+            <GroupBox Header="Aktuelle Position"
+                      Grid.Column="0"
+                      BorderBrush="{StaticResource ForegroundDarkBrush}"
+                      Foreground="{StaticResource ForegroundDarkBrush}"
+                      VerticalAlignment="Top"
+                      FontSize="11"
+                      Margin="0,0,5,0">
+                <TextBlock Text="{Binding Axis.Pos.ActualPos, StringFormat=0.00}"
+                       Foreground="{Binding ActualPosColor, Converter={conv:ColorToSolidBrushConverter}, Mode=OneWay}"
+                       FontSize="20"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       Margin="5"/>
+            </GroupBox>
+
+            <GroupBox Header="Override"
+                      Grid.Column="1"
+                      BorderBrush="{StaticResource ForegroundDarkBrush}"
+                      Foreground="{StaticResource ForegroundDarkBrush}"
+                      VerticalAlignment="Top"
+                      FontSize="11"
+                      Margin="5,0,0,0"
+                      x:Name="GroupBoxErrorCode">
+                <TextBlock Text="{Binding Axis.Release.Override, StringFormat={}{0:0.00}%}"
+                       Foreground="{StaticResource ForegroundDarkBrush}"
+                       FontSize="20"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       Margin="5"/>
+
+            </GroupBox>
+        </Grid>
+
+        <GroupBox Grid.Row="1"
+                  Header="Status"
+                  BorderBrush="{StaticResource ForegroundDarkBrush}"
+                  Foreground="{StaticResource ForegroundDarkBrush}"
+                  VerticalAlignment="Top"
+                  FontSize="11"
+                  Margin="0,5,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition/>
+                    <ColumnDefinition/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel>
+                    <CheckBox Content="Bereit"
+                         IsChecked="{Binding Axis.State.Ready, Mode=OneWay}"/>
+
+
+                    <CheckBox Content="Referenziert"
+                         IsChecked="{Binding Axis.State.Referenzed, Mode=OneWay}"/>
+
+                    <CheckBox Content="Job Aktiv"
+                         IsChecked="{Binding Axis.State.HasJob, Mode=OneWay}"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1">
+
+                    <CheckBox Content="In Stillstand"
+                         IsChecked="{Binding Axis.State.NotMoving, Mode=OneWay}"/>
+
+                    <CheckBox Content="Fährt +"
+                         IsChecked="{Binding Axis.State.MoveFW, Mode=OneWay}"/>
+
+                    <CheckBox Content="Fährt -"
+                         IsChecked="{Binding Axis.State.MoveBW, Mode=OneWay}"/>
+
+                </StackPanel>
+            </Grid>
+
+        </GroupBox>
+
+        <GroupBox Grid.Row="2"
+                  Header="Freigaben"
+                  Foreground="{StaticResource ForegroundDarkBrush}"
+                  BorderBrush="{StaticResource ForegroundDarkBrush}"
+                  FontSize="11">
+                <StackPanel>
+                    <CheckBox Content="Regler"
+                              IsChecked="{Binding Axis.Release.ControllerRelease, Mode=OneWay}"/>
+
+                    <CheckBox Content="Vorschub +"
+                              IsChecked="{Binding Axis.Release.FeedFW, Mode=OneWay}"/>
+                    <CheckBox Content="Vorschub -"
+                              IsChecked="{Binding Axis.Release.FeedBW, Mode=OneWay}"/>
+                </StackPanel>
+            </GroupBox>
+
+        <GroupBox Grid.Row="3"
+                  Header="Fehler-Code"
+                  Foreground="{StaticResource ForegroundDarkBrush}"
+                  BorderBrush="{StaticResource ForegroundDarkBrush}"
+                  FontSize="11">
+            
+            <TextBlock Text="{Binding Axis.State.ErrorCode, StringFormat={}0x{0:X4}}"
+                           FontSize="20"
+                           Foreground="{StaticResource ErrorBrush}"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Axis.State.ErrorCode}" Value="0">
+                                <Setter Property="Visibility" Value="Hidden"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+        </GroupBox>
+
+        <Grid Grid.Row="5">
+            <Grid.RowDefinitions>
+                <RowDefinition/>
+                <RowDefinition/>
+            </Grid.RowDefinitions>
+
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition/>
+                <ColumnDefinition/>
+            </Grid.ColumnDefinitions>
+
+            <GroupBox Grid.Row="0"
+                      Grid.Column="0"
+                      Margin="0,5,5,0"
+                      Header="Ziel Position"
+                      Foreground="{StaticResource ForegroundDarkBrush}"
+                      BorderBrush="{StaticResource ForegroundDarkBrush}"
+                      FontSize="11">
+                <TextBox FontSize="20"
+                         Background="Transparent"
+                         Foreground="{StaticResource ForegroundDarkBrush}"
+                         Text="{Binding TargetPos}"
+                         BorderThickness="0"
+                         TextAlignment="Center"
+                         HorizontalAlignment="Stretch"/>
+            </GroupBox>
+
+            <GroupBox Grid.Row="0"
+                      Grid.Column="1"
+                      Margin="5,5,0,0"
+                      Header="Ziel Geschwindigkeit"
+                      Foreground="{StaticResource ForegroundDarkBrush}"
+                      BorderBrush="{StaticResource ForegroundDarkBrush}"
+                      FontSize="11">
+
+                <TextBox FontSize="20"
+                         Foreground="{StaticResource ForegroundDarkBrush}"
+                         Text="{Binding TargetVel}"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         TextAlignment="Center"
+                         HorizontalAlignment="Stretch"/>
+                
+            </GroupBox>
+            <StackPanel Grid.Row="1"
+                        Grid.ColumnSpan="2"
+                        Orientation="Horizontal">
+                
+                <Button Style="{StaticResource AxisMoveButton}"
+                        Content="--"
+                        IsEnabled="{Binding CanMoveNeg, Mode=OneWay}">
+                    <i:Interaction.Triggers>
+                        <i:EventTrigger EventName="PreviewMouseDown">
+                            <i:InvokeCommandAction Command="{Binding JogNegFastActiveCommand}"/>
+                        </i:EventTrigger>
+                        <i:EventTrigger EventName="PreviewMouseUp">
+                            <i:InvokeCommandAction Command="{Binding AxisStopCommand}"/>
+                        </i:EventTrigger>
+                    </i:Interaction.Triggers>
+                </Button>
+                <Button Style="{StaticResource AxisMoveButton}"
+                        Content="-"
+                        IsEnabled="{Binding CanMoveNeg, Mode=OneWay}">
+                    <i:Interaction.Triggers>
+                        <i:EventTrigger EventName="PreviewMouseDown">
+                            <i:InvokeCommandAction Command="{Binding JogNegActiveCommand}"/>
+                        </i:EventTrigger>
+                        <i:EventTrigger EventName="PreviewMouseUp">
+                            <i:InvokeCommandAction Command="{Binding AxisStopCommand}"/>
+                        </i:EventTrigger>
+                    </i:Interaction.Triggers>
+                </Button>
+
+                <Button Style="{StaticResource AxisMoveButton}"
+                        Content="+"
+                        IsEnabled="{Binding CanMovePos, Mode=OneWay}">
+                    <i:Interaction.Triggers>
+                        <i:EventTrigger EventName="PreviewMouseDown">
+                            <i:InvokeCommandAction Command="{Binding JogPosActiveCommand}"/>
+                        </i:EventTrigger>
+                        <i:EventTrigger EventName="PreviewMouseUp">
+
+                            <i:InvokeCommandAction Command="{Binding AxisStopCommand}"/>
+                        </i:EventTrigger>
+                    </i:Interaction.Triggers>
+                </Button>
+
+                <Button Style="{StaticResource AxisMoveButton}"
+                        Content="++"
+                        IsEnabled="{Binding CanMovePos, Mode=OneWay}">
+                    <i:Interaction.Triggers>
+                        <i:EventTrigger EventName="PreviewMouseDown">
+                            <i:InvokeCommandAction Command="{Binding RelativeSource={RelativeSource AncestorType=UserControl, Mode=FindAncestor}, Path=DataContext.JogPosFastActiveCommand}"/>
+                        </i:EventTrigger>
+                        <i:EventTrigger EventName="PreviewMouseUp">
+                            <i:InvokeCommandAction Command="{Binding AxisStopCommand}"/>
+                        </i:EventTrigger>
+                    </i:Interaction.Triggers>
+                </Button>
+                
+                <Button Style="{StaticResource RunButton}"
+                        Command="{Binding StartJobCommand}">
+                </Button>
+
+                <Button Style="{StaticResource StopButton}"
+                        Command="{Binding AxisStopCommand}">
+                </Button>
+
+            </StackPanel>
+        </Grid>
+        
+    </Grid>
+</UserControl>

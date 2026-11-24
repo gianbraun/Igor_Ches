@@ -1,0 +1,30 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Color x:Key="MainColor">#FFFFFF</Color>
+    <Color x:Key="SecondaryColor">#ececec</Color>
+    <Color x:Key="AcentColor">#287094</Color>
+    <Color x:Key="ForegroundDarkColor">#424242</Color>
+    <Color x:Key="ForegroundBrightColor">#FFFFFF</Color>
+    <Color x:Key="ForgroundDisabledColor">#C5C5C5</Color>
+    <Color x:Key="StatusOkColor">#339933</Color>
+    <Color x:Key="ErrorColor">#e51400</Color>
+    <Color x:Key="WarningColor">#ffcc00</Color>
+    <Color x:Key="InformationColor">#1ba1e2</Color>
+    <Color x:Key="ActiveColor">#4BFF00</Color>
+
+
+    <SolidColorBrush x:Key="MainBrush" Color="{StaticResource MainColor}"/>
+    <SolidColorBrush x:Key="SecondaryBrush" Color="{StaticResource SecondaryColor}"/>
+    <SolidColorBrush x:Key="AcentBrush" Color="{StaticResource AcentColor}"/>
+    <SolidColorBrush x:Key="ForegroundDarkBrush" Color="{StaticResource ForegroundDarkColor}"/>
+    <SolidColorBrush x:Key="ForegroundLightBrush" Color="{StaticResource ForegroundBrightColor}"/>
+    <SolidColorBrush x:Key="ForegroundDisabledBrush" Color="{StaticResource ForgroundDisabledColor}"/>
+
+    <SolidColorBrush x:Key="StatusOkBrush" Color="{StaticResource StatusOkColor}"/>
+    <SolidColorBrush x:Key="ErrorBrush" Color="{StaticResource ErrorColor}"/>
+    <SolidColorBrush x:Key="WarningBrush" Color="{StaticResource WarningColor}"/>
+    <SolidColorBrush x:Key="InformationBrush" Color="{StaticResource InformationColor}"/>
+    <SolidColorBrush x:Key="ActiveBrush" Color="{StaticResource ActiveColor}"/>
+
+</ResourceDictionary>

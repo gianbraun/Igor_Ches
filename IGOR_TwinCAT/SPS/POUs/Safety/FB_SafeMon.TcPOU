@@ -1,0 +1,104 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.9">
+  <POU Name="FB_SafeMon" Id="{9b00f845-c74d-4066-8476-c1f72c0a7d30}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_SafeMon
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+	bSafeState:		BOOL;
+	bIsReset:		BOOL;
+	fbError:		FB_Error;
+END_VAR
+VAR
+	{attribute 'displaymode':='binary'}
+	nDiag	AT %I*:	UINT;
+	nState	AT %I*:	USINT;
+	sMsg:			STRING;
+	i:				INT;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[bSafeState := nState = 3;
+bIsReset := nState = 5;
+CASE nState OF
+	0: //undefined
+		IF NOT fbError.bError THEN
+			fbError.M_Set(1, 'Undefinierter State!', nState, eID := E_ErrorIDs.eUndefinedState, eSrc := E_ErrorSrcs.eSafetyFb);
+		END_IF
+	1: //RUN
+		IF fbError.bError THEN
+			fbError.M_Reset();
+		END_IF
+	2:;
+	3:;
+	4://Error
+		IF NOT fbError.bError THEN
+			IF nDiag.0 THEN
+				sMsg := CONCAT(sMsg, 'DiskrepGr1,');
+			END_IF
+			IF nDiag.1 THEN
+				sMsg := CONCAT(sMsg, 'DiskrepGr2,');
+			END_IF
+			IF nDiag.2 THEN
+				sMsg := CONCAT(sMsg, 'DiskrepGr3,');
+			END_IF
+			IF nDiag.3 THEN
+				sMsg := CONCAT(sMsg, 'DiskrepGr4,');
+			END_IF
+			IF nDiag.4 THEN
+				sMsg := CONCAT(sMsg, 'EDM1,');
+			END_IF
+			IF nDiag.5 THEN
+				sMsg := CONCAT(sMsg, 'EDM2,');
+			END_IF
+			IF nDiag.8 THEN
+				sMsg := CONCAT(sMsg, 'DiskrepErrGr1Plus');
+			END_IF
+			IF nDiag.9 THEN
+				sMsg := CONCAT(sMsg, 'DiskrepErrGr2Plus');
+			END_IF
+			IF nDiag.10 THEN
+				sMsg := CONCAT(sMsg, 'DiskrepErrGr3Plus');
+			END_IF
+			IF nDiag.11 THEN
+				sMsg := CONCAT(sMsg, 'DiskrepErrGr4Plus');
+			END_IF
+			
+			fbError.M_Set(1, sMsg, TO_INT(nDiag), eID := E_ErrorIDs.eSafetyFbError, eSrc := E_ErrorSrcs.eSafetyFb);
+		END_IF
+	5,6,8:;
+	ELSE //undefined
+		IF NOT fbError.bError THEN
+			fbError.M_Set(1, 'Undefinierter State!', nState, eID := E_ErrorIDs.eUndefinedState, eSrc := E_ErrorSrcs.eSafetyFb);
+		END_IF
+END_CASE]]></ST>
+    </Implementation>
+    <LineIds Name="FB_SafeMon">
+      <LineId Id="117" Count="1" />
+      <LineId Id="9" Count="0" />
+      <LineId Id="16" Count="0" />
+      <LineId Id="33" Count="0" />
+      <LineId Id="19" Count="0" />
+      <LineId Id="34" Count="0" />
+      <LineId Id="20" Count="4" />
+      <LineId Id="30" Count="0" />
+      <LineId Id="63" Count="0" />
+      <LineId Id="113" Count="0" />
+      <LineId Id="64" Count="1" />
+      <LineId Id="105" Count="2" />
+      <LineId Id="147" Count="5" />
+      <LineId Id="69" Count="2" />
+      <LineId Id="75" Count="2" />
+      <LineId Id="93" Count="2" />
+      <LineId Id="99" Count="2" />
+      <LineId Id="129" Count="5" />
+      <LineId Id="50" Count="0" />
+      <LineId Id="114" Count="0" />
+      <LineId Id="37" Count="0" />
+      <LineId Id="111" Count="0" />
+      <LineId Id="125" Count="3" />
+      <LineId Id="119" Count="0" />
+      <LineId Id="17" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

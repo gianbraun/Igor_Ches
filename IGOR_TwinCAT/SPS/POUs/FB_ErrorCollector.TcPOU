@@ -1,0 +1,89 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="FB_ErrorCollector" Id="{f9aa26c4-0483-423f-82a5-7b8beceaf572}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_ErrorCollector
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	i: INT;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name="M_NewError" Id="{924919ae-eecd-4203-ba52-ec4cc691f278}">
+      <Declaration><![CDATA[METHOD M_NewError : BOOL
+VAR_INPUT
+	eID:	E_ErrorIDs;
+	eSrc:	E_ErrorSrcs;
+	sMsg: 	STRING;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[FOR i := 0 TO HMI.nNumberErrors - 1 DO
+	IF HMI.aErrors[i].nType = eID AND HMI.aErrors[i].nSource = eSrc THEN
+		RETURN;
+	END_IF
+END_FOR
+
+HMI.aErrors[HMI.nNumberErrors].nType := eID;
+HMI.aErrors[HMI.nNumberErrors].nSource := eSrc;
+HMI.aErrors[HMI.nNumberErrors].sMsg := sMsg;
+HMI.nNumberErrors := HMI.nNumberErrors + 1;
+HMI.bErrorChange := TRUE;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_QuitError" Id="{7ec86467-9e08-471d-b1ed-7c539d76da3c}">
+      <Declaration><![CDATA[METHOD M_QuitError : BOOL
+VAR_INPUT
+	eID:	E_ErrorIDs;
+	eSrc:	E_ErrorSrcs;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[FOR i := 0 TO HMI.nNumberErrors - 1 DO
+	IF HMI.aErrors[i].nType = eID AND HMI.aErrors[i].nSource = eSrc THEN
+		MEMSET(ADR(HMI.aErrors[i]), 0, SIZEOF(HMI.aErrors[i]));
+		IF NOT (i = MAX_ERRORS - 1) THEN
+			MEMMOVE(ADR(HMI.aErrors[i]), ADR(HMI.aErrors[i + 1]), SIZEOF(HMI.aErrors[i]) * HMI.nNumberErrors - i - 1);
+			MEMSET(ADR(HMI.aErrors[HMI.nNumberErrors - 1]), 0, SIZEOF(HMI.aErrors[HMI.nNumberErrors - 1]));
+		END_IF
+		HMI.nNumberErrors := HMI.nNumberErrors - 1;
+		HMI.bErrorChange := TRUE;
+		EXIT;
+	END_IF
+END_FOR
+]]></ST>
+      </Implementation>
+    </Method>
+    <LineIds Name="FB_ErrorCollector">
+      <LineId Id="22" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_ErrorCollector.M_NewError">
+      <LineId Id="18" Count="1" />
+      <LineId Id="21" Count="1" />
+      <LineId Id="20" Count="0" />
+      <LineId Id="23" Count="0" />
+      <LineId Id="5" Count="0" />
+      <LineId Id="16" Count="0" />
+      <LineId Id="36" Count="0" />
+      <LineId Id="17" Count="0" />
+      <LineId Id="29" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_ErrorCollector.M_QuitError">
+      <LineId Id="20" Count="2" />
+      <LineId Id="26" Count="0" />
+      <LineId Id="25" Count="0" />
+      <LineId Id="28" Count="0" />
+      <LineId Id="27" Count="0" />
+      <LineId Id="29" Count="0" />
+      <LineId Id="35" Count="0" />
+      <LineId Id="24" Count="0" />
+      <LineId Id="23" Count="0" />
+      <LineId Id="18" Count="0" />
+      <LineId Id="7" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

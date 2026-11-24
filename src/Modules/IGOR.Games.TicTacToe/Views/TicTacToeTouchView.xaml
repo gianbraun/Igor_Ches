@@ -1,0 +1,71 @@
+﻿<UserControl x:Class="IGOR.Games.TicTacToe.Views.TicTacToeTouchView"
+              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:conv="clr-namespace:IGOR.Games.TicTacToe.Converter"
+             xmlns:prims="http://prismlibrary.com/"
+             xmlns:viewmodels="clr-namespace:IGOR.Games.TicTacToe.ViewModels" 
+             d:DataContext="{d:DesignInstance Type=viewmodels:TicTacToeTouchViewModel}"
+             prims:ViewModelLocator.AutoWireViewModel="True"
+             HorizontalAlignment="Center"
+             VerticalAlignment="Center"
+             mc:Ignorable="d">
+    <UserControl.Resources>
+        <ResourceDictionary Source="pack://application:,,,/IGOR.Common.WPF;component/Styles/DefaultStyle.xaml"/>
+    </UserControl.Resources>
+
+    <StackPanel Margin="10" Orientation="Horizontal" HorizontalAlignment="Center">
+
+        <!--Left Column-->
+        <StackPanel MaxHeight="500">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" MinWidth="150">
+                <TextBlock Margin="0,0,5,0">Du spielst:</TextBlock>
+                <TextBlock Text="{Binding Game.HumanPlayer, Converter={conv:PlayerToStringConverter}, Mode=OneWay}"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="10,5" HorizontalAlignment="Center" MinWidth="150">
+                <TextBlock Text="{Binding Game.CurrentState.Self, Converter={conv:PlayerToStringConverter}, Mode=OneWay}"/>
+                <TextBlock Margin="5,0,0,0">ist an der Reihe.</TextBlock>
+            </StackPanel>
+        </StackPanel>
+        
+        <!--Central Column-->
+        <Grid Width="500"
+                    Height="500"
+              HorizontalAlignment="Center"
+              VerticalAlignment="Center"
+                    x:Name="Board">
+            <Grid.RowDefinitions> 
+                <RowDefinition Height="auto"/>
+                <RowDefinition Height="auto"/>
+                <RowDefinition Height="auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="auto"/>
+                <ColumnDefinition Width="auto"/>
+                <ColumnDefinition Width="auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            
+            <Grid.Resources>
+                <ResourceDictionary >
+                    <Style TargetType="Button">
+                        <Setter Property="Background" Value="White"/>
+                        <Setter Property="BorderBrush" Value="Gray"/>
+                        <Setter Property="BorderThickness" Value="1"/>
+                    </Style>
+                </ResourceDictionary>
+            </Grid.Resources>
+        </Grid>
+
+        <!--Right Column-->
+        <Button Content="Spielregeln"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Margin="25"
+                Command="{Binding OpenGameRulesCommand}"/>
+    </StackPanel>
+</UserControl>
+

@@ -1,0 +1,148 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="FB_VI_Light" Id="{295e50c8-154c-417f-a1d6-e2d2c631353c}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_VI_Light
+VAR_INPUT
+	bLightOn				: BOOL;		// general light on
+END_VAR
+VAR_OUTPUT
+	bError					: BOOL;		// error 
+END_VAR
+VAR_OUTPUT CONSTANT
+	nIlluminationMaxBrightness : UINT := 511; // Firmware 92.51: 4095, Firmware 92.8: 511
+END_VAR
+VAR
+	eResetHW			: E_ResetHW := E_ResetHW.INIT;	// Initial hardware reset to all illuminations
+	stDeviceState		: ST_DeviceState;				// Basic state of device
+	stLight				: ST_Light;						// Beckhoff illumination VI-R/P/B
+
+	bErrorInternal		: BOOL;							// Error internal
+	
+	//light settings
+	bIRActive						: BOOL  := TRUE; //activate infrared light
+	nIRBrightnessPercent			: REAL := 10;	 //brightness of infrared light 
+	bBlueActive						: BOOL := TRUE;	 //activate blue light
+	nBlueBrightnessPercent			: REAL := 10;	 //brightness of blue light 
+	bGreenActive					: BOOL := TRUE;  //activate green light
+	nGreenBrightnessPercent			: REAL := 10;	 //brightness of green light 
+	bOrangeActive					: BOOL := TRUE;	 //activate orange light
+	nOrangeBrightnessPercent		: Real := 10;	 //brightness of orange light 
+	
+	nMaxTemperature					: SINT := 50;
+	nTemperature					: SINT;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[//state machine
+CASE eResetHW OF 
+	E_ResetHW.INIT:
+		stLight.bEnable := FALSE;
+		stLight.bReset := TRUE;		
+		eResetHW := E_ResetHW.RESET_HW;
+		RETURN;	
+	E_ResetHW.RESET_HW:
+		stLight.bReset := FALSE;
+		eResetHW := E_ResetHW.DONE;
+		RETURN;
+	E_ResetHW.DONE:
+		stLight.bEnable := TRUE;
+		bErrorInternal := FALSE;
+		IF NOT stDeviceState.Ready THEN
+			bErrorInternal := TRUE;
+			RETURN;
+		ELSIF stDeviceState.Error THEN
+			bLightOn := FALSE;
+			stLight.bEnable := FALSE;
+			eResetHW := E_ResetHW.INIT;
+		END_IF
+
+END_CASE
+
+//-----------------------------------------------------------------------------------------------------------------
+//set brightness and duration values for illumination 
+stLight.channel[1].bActive		:= bIRActive;
+stLight.channel[1].nBrightness	:= REAL_TO_UINT( nIRBrightnessPercent		* nIlluminationMaxBrightness / 100); // IR 
+stLight.channel[2].bActive		:= bBlueActive;
+stLight.channel[2].nBrightness	:= REAL_TO_UINT(nBlueBrightnessPercent	* nIlluminationMaxBrightness / 100); // blue 
+stLight.channel[3].bActive		:= bGreenActive;
+stLight.channel[3].nBrightness	:= REAL_TO_UINT(nGreenBrightnessPercent	* nIlluminationMaxBrightness / 100); // green 
+stLight.channel[4].bActive		:= bOrangeActive;
+stLight.channel[4].nBrightness	:= REAL_TO_UINT(nOrangeBrightnessPercent	* nIlluminationMaxBrightness / 100); // orange 
+
+nTemperature := stLight.nTemperature;
+  
+//-----------------------------------------------------------------------------------------------------------------
+// Automatic triggering
+IF bLightOn AND nTemperature <= nMaxTemperature  THEN
+//	IF  (NOT stLight.bActive AND nTemperature <= nMaxTemperature -10) TODO: Überhitzungsschutz als Hystherese
+	stLight.bActive := TRUE;
+	//bLightOn := FALSE; //TODO testen 
+	
+	bErrorInternal := FALSE;
+	IF NOT stLight.bLightOn THEN
+		bErrorInternal := TRUE;
+	END_IF
+ELSE
+	stLight.bActive := FALSE;
+END_IF
+
+bError := stDeviceState.Error OR bErrorInternal;
+
+
+]]></ST>
+    </Implementation>
+    <Method Name="SetIRGB" Id="{926ee84b-755a-4494-b72e-ca8f9c507b2c}">
+      <Declaration><![CDATA[METHOD PUBLIC SetIRGB : BOOL
+VAR_INPUT
+	nIRChannel		:	UINT;
+	nRedChannel		:	UINT;
+	nGreenChannel	:	UINT;
+	nBlueChannel	:	UINT;
+	nBrightness		:	REAL; 
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[nIRBrightnessPercent := (UINT_TO_REAL(nIrChannel)/255.0)*(nBrightness);
+IF nIRChannel > 0 THEN
+	bIRActive := TRUE;  
+END_IF
+
+nBlueBrightnessPercent := (UINT_TO_REAL(nBlueChannel)/255.0)*(nBrightness);  
+IF nBlueChannel > 0 THEN
+	bBlueActive := TRUE;  
+END_IF
+ 
+nGreenBrightnessPercent := (UINT_TO_REAL(nGreenChannel)/255.0)*(nBrightness); 
+IF nGreenChannel > 0 THEN
+	bGreenActive := TRUE;  
+END_IF
+ 
+nOrangeBrightnessPercent := (UINT_TO_REAL(nRedChannel)/255.0)*(nBrightness); 
+IF nRedChannel > 0 THEN
+	bOrangeActive := TRUE;  
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="SetWhiteLight" Id="{54985642-08c8-45a3-86fb-5cf5d5f5daf1}">
+      <Declaration><![CDATA[METHOD SetWhiteLight : BOOL
+VAR_INPUT
+	nBrightness		: UINT := 100; 
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[SetIRGB(255, 255, 255, 255, nBrightness);]]></ST>
+      </Implementation>
+    </Method>
+    <LineIds Name="FB_VI_Light">
+      <LineId Id="3" Count="55" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_VI_Light.SetIRGB">
+      <LineId Id="3" Count="17" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_VI_Light.SetWhiteLight">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

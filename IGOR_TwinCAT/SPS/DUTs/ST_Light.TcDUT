@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <DUT Name="ST_Light" Id="{eea2f8da-b93c-423e-8016-ec26a4de446c}">
+    <Declaration><![CDATA[TYPE ST_Light :
+STRUCT
+	bEnable					AT %Q* 	: BOOL := TRUE;				// Global enable of light
+	bReset					AT %Q*	: BOOL := FALSE;			// Reset light
+	bActive					AT %Q*  : BOOL	 := FALSE;			// General activation of the light, depends on the chanels
+	bLightOn				AT %I*	: BOOL;						// Light is activated
+	channel					AT %Q*  : ARRAY[1..4] OF ST_Channel; // 1: IR, 2: blue, 3: green, 4: orange
+	nTemperature			AT %I*	: SINT;						// temperature channel
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

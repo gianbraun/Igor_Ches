@@ -1,0 +1,218 @@
+﻿<UserControl x:Class="IGOR.Games.TicTacToe.Views.TicTacToeCamView"
+              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:prims="http://prismlibrary.com/"
+             xmlns:conv="clr-namespace:IGOR.Games.TicTacToe.Converter"
+             xmlns:comConv="clr-namespace:IGOR.Common.WPF.Converters;assembly=IGOR.Common.WPF"
+             xmlns:viewmodels="clr-namespace:IGOR.Games.TicTacToe.ViewModels" 
+             d:DataContext="{d:DesignInstance Type=viewmodels:TicTacToeCamViewModel}"
+             prims:ViewModelLocator.AutoWireViewModel="True"
+             HorizontalAlignment="Center"
+             VerticalAlignment="Center"
+             mc:Ignorable="d"
+             x:Name="TicTacToeControl">
+    <UserControl.Resources>
+        <ResourceDictionary Source="pack://application:,,,/IGOR.Common.WPF;component/Styles/DefaultStyle.xaml"/>
+    </UserControl.Resources>
+
+    <StackPanel Margin="10" Orientation="Horizontal" HorizontalAlignment="Center">
+
+        <!--Left Column-->
+        <StackPanel MaxHeight="500">
+            <Button Content="Trigger Kamera" HorizontalAlignment="Center" VerticalAlignment="Center"
+                Margin="25"
+                Command="{Binding TriggerCamCommand}"/>
+            <Button Content="Bestätige Zug" HorizontalAlignment="Center" VerticalAlignment="Center"
+                Margin="25"
+                Command="{Binding ValidateMoveCommand}"/>
+            <TextBlock HorizontalAlignment="Center"
+                       Text="{Binding Message}" 
+                       Foreground="Red"/>
+
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" MinWidth="150">
+                <TextBlock Margin="0,0,5,0">Du spielst:</TextBlock>
+                <TextBlock Text="{Binding Game.HumanPlayer, Converter={conv:PlayerToStringConverter}, Mode=OneWay}"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="10,5" HorizontalAlignment="Center" MinWidth="150">
+                <TextBlock Text="{Binding Game.CurrentState.Self, Converter={conv:PlayerToStringConverter}, Mode=OneWay}"/>
+                <TextBlock Margin="5,0,0,0">ist an der Reihe.</TextBlock>
+            </StackPanel>
+        </StackPanel>
+
+        <!--Central Column-->
+        <Grid Width="500"
+              Height="500"
+              Background="White">
+
+            <Viewbox Width="500"
+                     Height="500">
+                <Grid>
+
+                    <!--Draw Field-->
+                    <Canvas x:Name="DrawingCanvas"/>
+                    
+                    <!--DrawStones-->
+                    <ItemsControl ItemsSource="{Binding Stones}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <Canvas x:Name="StoneCanvas"
+                                    Width="{Binding ElementName=DrawingCanvas,Path=Width}"
+                                    Height="{Binding ElementName=DrawingCanvas, Path=Height}">
+                                    <Canvas.RenderTransform>
+                                        <ScaleTransform ScaleX="2" 
+                                                    ScaleY="2"
+                                                    CenterX="{Binding ElementName=TicTacToeControl, Path=DataContext.CenterFieldX}"
+                                                    CenterY="{Binding ElementName=TicTacToeControl, Path=DataContext.CenterFieldY}"/>
+                                    </Canvas.RenderTransform>
+                                </Canvas>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid>
+                                    <Ellipse Width="90"
+                                     Height="90"
+                                     StrokeThickness="2"
+                                     Stroke="Gray"
+                                     Fill="{Binding Player, Converter={conv:PlayerToColorConverter}, Mode=OneWay}"
+                                     x:Name="Stone">
+                                        <Ellipse.RenderTransform>
+                                            <TranslateTransform X="-45" Y="-45"/>
+                                        </Ellipse.RenderTransform>
+                                    </Ellipse>
+                                    <Ellipse Width="90"
+                                     Height="90"
+                                     StrokeThickness="{Binding IsInvalidPos , Converter={comConv:BoolToThicknessConverter}, ConverterParameter=5}"
+                                     Stroke="Red"
+                                     Fill="Transparent"
+                                     x:Name="StoneError">
+                                        <Ellipse.Effect>
+                                            <DropShadowEffect ShadowDepth="5" BlurRadius="10" Opacity="0.6"/>
+                                        </Ellipse.Effect>
+                                        <Ellipse.RenderTransform>
+                                            <TranslateTransform X="-45" Y="-45"/>
+                                        </Ellipse.RenderTransform>
+                                    </Ellipse>
+                                </Grid> 
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                        <ItemsControl.ItemContainerStyle>
+                            <Style TargetType="ContentPresenter">
+                                <Setter Property="Canvas.Left" Value="{Binding X}"/>
+                                <Setter Property="Canvas.Top" Value="{Binding Y}"/>
+                            </Style>
+                        </ItemsControl.ItemContainerStyle>
+                    </ItemsControl>
+
+                    <!--Draw Differences-->
+                    <Grid>
+                        <!--Draw Fields-->
+                        <ItemsControl ItemsSource="{Binding Differences}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <Canvas x:Name="DifferencesCanvas"
+                                    Width="{Binding ElementName=DrawingCanvas,Path=Width}"
+                                    Height="{Binding ElementName=DrawingCanvas, Path=Height}">
+                                    <Canvas.RenderTransform>
+                                        <ScaleTransform ScaleX="2" 
+                                                    ScaleY="2"
+                                                    CenterX="{Binding ElementName=TicTacToeControl, Path=DataContext.CenterFieldX}"
+                                                    CenterY="{Binding ElementName=TicTacToeControl, Path=DataContext.CenterFieldY}"/>
+                                    </Canvas.RenderTransform>
+                                </Canvas>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Width="{Binding ElementName=TicTacToeControl, Path=Size}"
+                                    Height="{Binding ElementName=TicTacToeControl, Path=Size}"
+                                    BorderBrush="Red"
+                                    BorderThickness="5">
+                                    <Border.RenderTransform>
+                                        <TranslateTransform X="{Binding ElementName=TicTacToeControl, Path=DifferenceRenderTransform}" Y="{Binding ElementName=TicTacToeControl, Path=DifferenceRenderTransform}"/>
+                                    </Border.RenderTransform>
+                                    <!--<Ellipse HorizontalAlignment="Center" VerticalAlignment="Center"
+                                         Width="100"
+                                         Height="100"
+                                         StrokeThickness="5"
+                                         Stroke="Red"
+                                         Fill="{Binding Player, Converter={conv:DifferencePlayerToColorConverter}, Mode=OneWay}"
+                                         x:Name="Difference" Opacity="0.7">
+                                        <Ellipse.Effect>
+                                            <DropShadowEffect ShadowDepth="5" BlurRadius="10" Opacity="0.6"/>
+                                        </Ellipse.Effect>
+                                    </Ellipse>-->
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                        <ItemsControl.ItemContainerStyle>
+                            <Style TargetType="ContentPresenter">
+                                <Setter Property="Canvas.Left" Value="{Binding FieldX}"/>
+                                <Setter Property="Canvas.Top" Value="{Binding FieldY}"/>
+                            </Style>
+                        </ItemsControl.ItemContainerStyle>
+                    </ItemsControl>
+
+                        <!--Draw Stones-->
+                        <ItemsControl ItemsSource="{Binding Differences}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <Canvas x:Name="DifferencesCanvas"
+                                    Width="{Binding ElementName=DrawingCanvas,Path=Width}"
+                                    Height="{Binding ElementName=DrawingCanvas, Path=Height}">
+                                        <Canvas.RenderTransform>
+                                            <ScaleTransform ScaleX="2" 
+                                                    ScaleY="2"
+                                                    CenterX="{Binding ElementName=TicTacToeControl, Path=DataContext.CenterFieldX}"
+                                                    CenterY="{Binding ElementName=TicTacToeControl, Path=DataContext.CenterFieldY}"/>
+                                        </Canvas.RenderTransform>
+                                    </Canvas>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Width="{Binding ElementName=TicTacToeControl, Path=Size}"
+                                    Height="{Binding ElementName=TicTacToeControl, Path=Size}"
+                                    BorderBrush="Red"
+                                    BorderThickness="0">
+                                        <Border.RenderTransform>
+                                            <TranslateTransform X="{Binding ElementName=TicTacToeControl, Path=DifferenceRenderTransform}" Y="{Binding ElementName=TicTacToeControl, Path=DifferenceRenderTransform}"/>
+                                        </Border.RenderTransform>
+                                        <Ellipse HorizontalAlignment="Center" VerticalAlignment="Center"
+                                         Width="100"
+                                         Height="100"
+                                         StrokeThickness="5"
+                                         Stroke="Red"
+                                         Fill="{Binding Player, Converter={conv:DifferencePlayerToColorConverter}, Mode=OneWay}"
+                                         x:Name="Difference" Opacity="0.7">
+                                            <Ellipse.Effect>
+                                                <DropShadowEffect ShadowDepth="5" BlurRadius="10" Opacity="0.6"/>
+                                            </Ellipse.Effect>
+                                        </Ellipse>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                            <ItemsControl.ItemContainerStyle>
+                                <Style TargetType="ContentPresenter">
+                                    <Setter Property="Canvas.Left" Value="{Binding StoneX}"/>
+                                    <Setter Property="Canvas.Top" Value="{Binding StoneY}"/>
+                                </Style>
+                            </ItemsControl.ItemContainerStyle>
+                        </ItemsControl>
+                    </Grid>
+                </Grid>
+            </Viewbox>
+        </Grid>
+
+        <!--Right Column-->
+        <Button Content="Spielregeln"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Margin="25"
+                Command="{Binding OpenGameRulesCommand}"/>
+    </StackPanel>
+
+</UserControl>

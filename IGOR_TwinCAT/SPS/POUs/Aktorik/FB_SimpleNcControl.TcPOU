@@ -1,0 +1,386 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.9">
+  <POU Name="FB_SimpleNcControl" Id="{c236e9e8-0263-42e9-82d1-aa06de294b98}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_SimpleNcControl IMPLEMENTS I_NC_Ctrl
+VAR CONSTANT
+	VELO:				LREAL := 50;
+END_VAR
+VAR
+	bEnable:			BOOL := TRUE;
+	bReset:				BOOL;
+	eState:				E_NC_State;
+	bBusy:				BOOL;
+	fbError:			FB_Error;
+
+	
+	rAxisX:				REFERENCE TO AXIS_REF;
+	rAxisY:				REFERENCE TO AXIS_REF;
+	rAxisZ:				REFERENCE TO AXIS_REF;
+	
+	fbAxisCtrlX:		FB_AxisCtrl;
+	fbAxisCtrlY:		FB_AxisCtrl;
+	fbAxisCtrlZ:		FB_AxisCtrl;
+	
+		
+	fTargetX:			LREAL;
+	fTargetY:			LREAL;
+	fTargetZ:			LREAL;
+		
+	nRunState:			USINT; //0: Fall wählen; 10: nach oben, dann zum Ziel; 20: über Ziel fahren, dann senkrecht herunter //ZIEL: Gefahrenbereich umfahren
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[CASE eState OF	
+	E_NC_State_INIT:
+		IF __ISVALIDREF(rAxisX) AND __ISVALIDREF(rAxisY) AND __ISVALIDREF(rAxisZ) THEN			
+			eState := E_NC_State_IDLE;
+		END_IF
+
+	E_NC_State_IDLE:
+		;		
+				
+	E_NC_State_RUN:
+		IF bEnable THEN
+			CASE nRunState OF
+				0:
+					IF rAxisZ.NcToPlc.SetPos < MIN_MOVE_HEIGHT_Z AND (ABS(fTargetX - rAxisX.NcToPlc.SetPos) > 2 OR ABS(fTargetY - rAxisY.NcToPlc.SetPos) > 2) THEN
+						nRunState := 10; //erst vertikal Gefahrenbereich verlassen, dann zum Ziel fahren
+					ELSIF fTargetZ < MIN_MOVE_HEIGHT_Z AND (ABS(fTargetX - rAxisX.NcToPlc.SetPos) > 2 OR ABS(fTargetY - rAxisY.NcToPlc.SetPos) > 2) THEN
+						nRunState := 20;
+					ELSE
+						nRunState := 11;
+					END_IF
+				
+				10: //nach oben, dann zum Ziel
+					fbAxisCtrlZ(stAxis := rAxisZ, eCommandIn := E_AxesCmd_MOVE_ABS, fPos := MIN_MOVE_HEIGHT_Z, fVelo := VELO);
+					IF NOT fbAxisCtrlZ.bBusy THEN
+						IF fbAxisCtrlZ.fbError.bError THEN
+							fbError.M_Set(fbAxisCtrlZ.fbError.nErrorID, CONCAT('Achse Z: ', fbAxisCtrlZ.fbError.sErrorMsg), eState, eID := E_ErrorIDs.eAxisError, eSrc := E_ErrorSrcs.eAxisZ);
+							eState := E_NC_State_ERROR;
+						ELSE
+							fbAxisCtrlZ(stAxis := rAxisZ, eCommandIn := E_AxesCmd_IDLE);
+							nRunState := 0;
+						END_IF
+					END_IF
+					
+				11:
+					fbAxisCtrlX(stAxis := rAxisX, eCommandIn := E_AxesCmd_MOVE_ABS, fPos := fTargetX, fVelo := VELO);
+					fbAxisCtrlY(stAxis := rAxisY, eCommandIn := E_AxesCmd_MOVE_ABS, fPos := fTargetY, fVelo := VELO);
+					fbAxisCtrlZ(stAxis := rAxisZ, eCommandIn := E_AxesCmd_MOVE_ABS, fPos := fTargetZ, fVelo := VELO);
+					IF NOT fbAxisCtrlX.bBusy AND NOT fbAxisCtrlY.bBusy AND NOT fbAxisCtrlZ.bBusy THEN
+						IF fbAxisCtrlX.fbError.bError THEN
+							fbError.M_Set(fbAxisCtrlX.fbError.nErrorID, CONCAT('Achse X: ', fbAxisCtrlX.fbError.sErrorMsg), eState, eID := E_ErrorIDs.eAxisError, eSrc := E_ErrorSrcs.eAxisX);
+							eState := E_NC_State_ERROR;
+						ELSIF fbAxisCtrlY.fbError.bError THEN
+							fbError.M_Set(fbAxisCtrlY.fbError.nErrorID, CONCAT('Achse Y: ', fbAxisCtrlY.fbError.sErrorMsg), eState, eID := E_ErrorIDs.eAxisError, eSrc := E_ErrorSrcs.eAxisY);
+							eState := E_NC_State_ERROR;
+						ELSIF fbAxisCtrlZ.fbError.bError THEN
+							fbError.M_Set(fbAxisCtrlZ.fbError.nErrorID, CONCAT('Achse Z: ', fbAxisCtrlZ.fbError.sErrorMsg), eState, eID := E_ErrorIDs.eAxisError, eSrc := E_ErrorSrcs.eAxisZ);
+							eState := E_NC_State_ERROR;
+						ELSE
+							fbAxisCtrlX(stAxis := rAxisX, eCommandIn := E_AxesCmd_IDLE);
+							fbAxisCtrlY(stAxis := rAxisY, eCommandIn := E_AxesCmd_IDLE);
+							fbAxisCtrlZ(stAxis := rAxisZ, eCommandIn := E_AxesCmd_IDLE);
+							bBusy := FALSE;
+							nRunState := 0;
+							eState := E_NC_State_IDLE;
+						END_IF
+					END_IF
+					
+					
+				20: //über Ziel fahren, dann senkrecht herunter
+					fbAxisCtrlX(stAxis := rAxisX, eCommandIn := E_AxesCmd_MOVE_ABS, fPos := fTargetX, fVelo := VELO);
+					fbAxisCtrlY(stAxis := rAxisY, eCommandIn := E_AxesCmd_MOVE_ABS, fPos := fTargetY, fVelo := VELO);
+					fbAxisCtrlZ(stAxis := rAxisZ, eCommandIn := E_AxesCmd_MOVE_ABS, fPos := MIN_MOVE_HEIGHT_Z, fVelo := VELO);
+					IF NOT fbAxisCtrlX.bBusy AND NOT fbAxisCtrlY.bBusy AND NOT fbAxisCtrlZ.bBusy THEN
+						IF fbAxisCtrlX.fbError.bError THEN
+							fbError.M_Set(fbAxisCtrlX.fbError.nErrorID, CONCAT('Achse X: ', fbAxisCtrlX.fbError.sErrorMsg), eState, eID := E_ErrorIDs.eAxisError, eSrc := E_ErrorSrcs.eAxisX);
+							eState := E_NC_State_ERROR;
+						ELSIF fbAxisCtrlY.fbError.bError THEN
+							fbError.M_Set(fbAxisCtrlY.fbError.nErrorID, CONCAT('Achse Y: ', fbAxisCtrlY.fbError.sErrorMsg), eState, eID := E_ErrorIDs.eAxisError, eSrc := E_ErrorSrcs.eAxisY);
+							eState := E_NC_State_ERROR;
+						ELSIF fbAxisCtrlZ.fbError.bError THEN
+							fbError.M_Set(fbAxisCtrlZ.fbError.nErrorID, CONCAT('Achse Z: ', fbAxisCtrlZ.fbError.sErrorMsg), eState, eID := E_ErrorIDs.eAxisError, eSrc := E_ErrorSrcs.eAxisZ);
+							eState := E_NC_State_ERROR;
+						ELSE
+							fbAxisCtrlX(stAxis := rAxisX, eCommandIn := E_AxesCmd_IDLE);
+							fbAxisCtrlY(stAxis := rAxisY, eCommandIn := E_AxesCmd_IDLE);
+							fbAxisCtrlZ(stAxis := rAxisZ, eCommandIn := E_AxesCmd_IDLE);
+							nRunState := 21;
+						END_IF
+					END_IF
+				21:
+					fbAxisCtrlZ(stAxis := rAxisZ, eCommandIn := E_AxesCmd_MOVE_ABS, fPos := fTargetZ, fVelo := VELO);
+					IF NOT fbAxisCtrlZ.bBusy THEN
+						IF fbAxisCtrlZ.fbError.bError THEN
+							fbError.M_Set(fbAxisCtrlZ.fbError.nErrorID, CONCAT('Achse Z: ', fbAxisCtrlZ.fbError.sErrorMsg), eState, eID := E_ErrorIDs.eAxisError, eSrc := E_ErrorSrcs.eAxisZ);
+							eState := E_NC_State_ERROR;
+						ELSE
+							fbAxisCtrlZ(stAxis := rAxisZ, eCommandIn := E_AxesCmd_IDLE);
+							bBusy := FALSE;
+							nRunState := 0;
+							eState := E_NC_State_IDLE;
+						END_IF
+					END_IF
+					
+			END_CASE			
+		ELSE
+			eState := E_NC_State_ABORT;
+		END_IF
+		
+	E_NC_State_ABORT:
+		fbAxisCtrlX(stAxis := rAxisX);
+		fbAxisCtrlY(stAxis := rAxisY);
+		fbAxisCtrlZ(stAxis := rAxisZ);
+		IF NOT fbAxisCtrlX.bBusy AND NOT fbAxisCtrlY.bBusy AND NOT fbAxisCtrlZ.bBusy THEN
+			IF fbAxisCtrlX.fbError.bError THEN
+				fbError.M_Set(fbAxisCtrlX.fbError.nErrorID, CONCAT('Achse X: ', fbAxisCtrlX.fbError.sErrorMsg), eState, eID := E_ErrorIDs.eAxisError, eSrc := E_ErrorSrcs.eAxisX);
+				eState := E_NC_State_ERROR;
+			ELSIF fbAxisCtrlY.fbError.bError THEN
+				fbError.M_Set(fbAxisCtrlY.fbError.nErrorID, CONCAT('Achse Y: ', fbAxisCtrlY.fbError.sErrorMsg), eState, eID := E_ErrorIDs.eAxisError, eSrc := E_ErrorSrcs.eAxisY);
+				eState := E_NC_State_ERROR;
+			ELSIF fbAxisCtrlZ.fbError.bError THEN
+				fbError.M_Set(fbAxisCtrlZ.fbError.nErrorID, CONCAT('Achse Z: ', fbAxisCtrlZ.fbError.sErrorMsg), eState, eID := E_ErrorIDs.eAxisError, eSrc := E_ErrorSrcs.eAxisZ);
+				eState := E_NC_State_ERROR;
+			ELSE
+				eState := E_NC_State_IDLE;
+			END_IF
+		END_IF
+		
+	E_NC_State_ERROR:
+		;
+END_CASE
+
+IF bReset THEN
+	bReset := FALSE;
+	fbError.M_Reset();
+	IF eState = E_NC_State_ERROR THEN
+		fbAxisCtrlX(stAxis := rAxisX, bReset := TRUE);
+		fbAxisCtrlY(stAxis := rAxisY, bReset := TRUE);
+		fbAxisCtrlZ(stAxis := rAxisZ, bReset := TRUE);
+		eState := E_NC_State_IDLE;
+	END_IF
+END_IF
+
+bBusy := eState <> E_NC_State_IDLE
+	 AND eState <> E_NC_State_ERROR;]]></ST>
+    </Implementation>
+    <Method Name="M_AxesReady" Id="{c8a10f5e-82d0-4b35-9242-c490062659ae}">
+      <Declaration><![CDATA[METHOD M_AxesReady : BOOL
+VAR_INPUT
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[
+IF __ISVALIDREF(rAxisX) AND __ISVALIDREF(rAxisY) AND __ISVALIDREF(rAxisZ) THEN		
+	rAxisX.ReadStatus();
+	rAxisY.ReadStatus();
+	rAxisZ.ReadStatus();
+	IF rAxisX.Status.Operational AND rAxisY.Status.Operational AND rAxisZ.Status.Operational THEN
+		M_AxesReady := TRUE;
+	END_IF
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_AxisRef" Id="{dcca78ad-e6bb-4717-a84e-0d5c88ba4d6b}">
+      <Declaration><![CDATA[METHOD M_AxisRef
+VAR_INPUT
+	rX: REFERENCE TO AXIS_REF;
+	rY: REFERENCE TO AXIS_REF;
+	rZ: REFERENCE TO AXIS_REF;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[
+rAxisX REF= rX;
+rAxisY REF= rY;
+rAxisZ REF= rZ;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_CancelJob" Id="{3fe2cf29-9c01-4b25-89e9-4a8027f76695}">
+      <Declaration><![CDATA[METHOD M_CancelJob
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[fbAxisCtrlX(stAxis := rAxisX, eCommandIn := E_AxesCmd_IDLE);
+fbAxisCtrlY(stAxis := rAxisY, eCommandIn := E_AxesCmd_IDLE);
+fbAxisCtrlZ(stAxis := rAxisZ, eCommandIn := E_AxesCmd_IDLE);
+eState := E_NC_State_ABORT;
+]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_Cyclic" Id="{7e4f8fa1-fcb0-42e3-9b6d-09a9858a4de8}">
+      <Declaration><![CDATA[METHOD M_Cyclic
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[THIS^();
+
+//fbAxesEnable(bEnableAxes := bEnable OR eState <> E_NC_State_IDLE, fOverride := AXES_OVERRIDE, stX := rAxisX, stY := rAxisY, stZ := rAxisZ);
+fbAxisCtrlX(stAxis := rAxisX);
+fbAxisCtrlY(stAxis := rAxisY);
+fbAxisCtrlZ(stAxis := rAxisZ);
+]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_NewJob" Id="{ca4ee68f-6e3a-4e4e-aeed-8d6a5345539a}">
+      <Declaration><![CDATA[METHOD M_NewJob
+VAR_INPUT
+	fTargetPosX	: LREAL;
+	fTargetPosY	: LREAL;
+	fTargetPosZ	: LREAL;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF M_AxesReady() THEN
+	IF eState = E_NC_State_IDLE THEN
+		fTargetX := fTargetPosX;
+		fTargetY := fTargetPosY;
+		fTargetZ := fTargetPosZ;
+		eState := E_NC_State_RUN;
+		nRunState := 0;
+		fbError.M_Reset();
+	ELSIF eState = E_NC_State_RUN AND (fTargetX <> fTargetPosX OR fTargetY <> fTargetPosY OR fTargetZ <> fTargetPosZ) THEN	
+		M_CancelJob();
+	END_IF
+ELSE
+	fbError.M_Set(1, 'Achsen sind nicht bereit!', eState, eID := E_ErrorIDs.eAxesNotReady, eSrc := E_ErrorSrcs.eAxisCtrlPtp);
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Property Name="P_Busy" Id="{3887cb1c-0457-4933-847d-51378cb220ed}">
+      <Declaration><![CDATA[
+PROPERTY P_Busy : BOOL
+]]></Declaration>
+      <Get Name="Get" Id="{b41cbe41-4a13-44ba-b768-1f234dbcf707}">
+        <Declaration><![CDATA[VAR
+END_VAR
+]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[P_Busy := bBusy;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Property Name="P_Enable" Id="{f7e7b5bb-ba54-40e7-b06c-2e2add145769}">
+      <Declaration><![CDATA[PROPERTY P_Enable : BOOL
+]]></Declaration>
+      <Set Name="Set" Id="{13ccb6e4-22e3-4365-b80f-9e50af8a9003}">
+        <Declaration><![CDATA[VAR
+END_VAR
+]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[bEnable := P_Enable;]]></ST>
+        </Implementation>
+      </Set>
+    </Property>
+    <Property Name="P_ErrID" Id="{876b6736-0bf5-4b8e-a55c-eab4c330f51e}">
+      <Declaration><![CDATA[PROPERTY P_ErrID : UDINT
+]]></Declaration>
+      <Get Name="Get" Id="{b1fa7b41-37cd-4407-8f74-cf35577c637f}">
+        <Declaration><![CDATA[VAR
+END_VAR
+]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[P_ErrID := fbError.nErrorID;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Property Name="P_ErrMsg" Id="{7f637b45-e7fe-41a6-aadc-a61535c0c11c}">
+      <Declaration><![CDATA[PROPERTY P_ErrMsg : STRING
+]]></Declaration>
+      <Get Name="Get" Id="{e2bdb9f5-f7df-4188-8b95-e3f687ff2583}">
+        <Declaration><![CDATA[VAR
+END_VAR
+]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[P_ErrMsg := fbError.sErrorMsg;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Property Name="P_Error" Id="{aa27c985-30ac-4631-b09f-6387107b74f7}">
+      <Declaration><![CDATA[PROPERTY P_Error : BOOL
+]]></Declaration>
+      <Get Name="Get" Id="{28a120ad-575a-43b9-b0e1-bd7f0d410949}">
+        <Declaration><![CDATA[VAR
+END_VAR
+]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[P_Error := fbError.bError;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Property Name="P_Reset" Id="{979f83c8-5916-4d66-ac03-6e9589efbfd8}">
+      <Declaration><![CDATA[
+PROPERTY P_Reset : BOOL
+]]></Declaration>
+      <Set Name="Set" Id="{1da12ba2-b9e3-441e-9334-397cd7abb3ca}">
+        <Declaration><![CDATA[VAR
+END_VAR
+]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[bReset := P_Reset;]]></ST>
+        </Implementation>
+      </Set>
+    </Property>
+    <LineIds Name="FB_SimpleNcControl">
+      <LineId Id="508" Count="1" />
+      <LineId Id="801" Count="0" />
+      <LineId Id="804" Count="0" />
+      <LineId Id="803" Count="0" />
+      <LineId Id="513" Count="1" />
+      <LineId Id="542" Count="95" />
+      <LineId Id="639" Count="26" />
+      <LineId Id="353" Count="0" />
+      <LineId Id="706" Count="0" />
+      <LineId Id="705" Count="0" />
+      <LineId Id="708" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_SimpleNcControl.M_AxesReady">
+      <LineId Id="6" Count="1" />
+      <LineId Id="9" Count="5" />
+      <LineId Id="5" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_SimpleNcControl.M_AxisRef">
+      <LineId Id="14" Count="0" />
+      <LineId Id="11" Count="2" />
+    </LineIds>
+    <LineIds Name="FB_SimpleNcControl.M_CancelJob">
+      <LineId Id="10" Count="1" />
+      <LineId Id="8" Count="0" />
+      <LineId Id="5" Count="1" />
+    </LineIds>
+    <LineIds Name="FB_SimpleNcControl.M_Cyclic">
+      <LineId Id="4" Count="0" />
+      <LineId Id="6" Count="3" />
+      <LineId Id="5" Count="0" />
+      <LineId Id="10" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_SimpleNcControl.M_NewJob">
+      <LineId Id="47" Count="0" />
+      <LineId Id="38" Count="2" />
+      <LineId Id="36" Count="0" />
+      <LineId Id="26" Count="0" />
+      <LineId Id="32" Count="0" />
+      <LineId Id="31" Count="0" />
+      <LineId Id="29" Count="1" />
+      <LineId Id="17" Count="1" />
+      <LineId Id="48" Count="1" />
+    </LineIds>
+    <LineIds Name="FB_SimpleNcControl.P_Busy.Get">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_SimpleNcControl.P_Enable.Set">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_SimpleNcControl.P_ErrID.Get">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_SimpleNcControl.P_ErrMsg.Get">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_SimpleNcControl.P_Error.Get">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_SimpleNcControl.P_Reset.Set">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

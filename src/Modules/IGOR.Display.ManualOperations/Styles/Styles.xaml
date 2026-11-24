@@ -1,0 +1,8 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="pack://application:,,,/IGOR.Common.WPF;component/Styles/DefaultStyle.xaml"/>
+        <ResourceDictionary Source="pack://application:,,,/IGOR.Display.ManualOperations;component/Styles/AxisStyle.xaml"/>
+        <ResourceDictionary Source="pack://application:,,,/IGOR.Display.ManualOperations;component/Styles/CheckBoxStyle.xaml"/>
+        <ResourceDictionary Source="pack://application:,,,/IGOR.Display.ManualOperations;component/Styles/ButtonsStyle.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+</ResourceDictionary>
